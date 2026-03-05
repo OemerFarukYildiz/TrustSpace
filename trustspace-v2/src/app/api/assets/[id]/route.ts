@@ -4,11 +4,12 @@ import { prisma } from "@/lib/db";
 // GET /api/assets/[id] - Einzelnes Asset mit allen Details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const asset = await prisma.asset.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         owner: {
           select: {
@@ -26,11 +27,11 @@ export async function GET(
     // Verfügbare Assets für Verknüpfung (andere Assets außer diesem)
     const availableAssets = await prisma.asset.findMany({
       where: {
-        id: { not: params.id },
+        id: { not: id },
         NOT: {
           linkedTo: {
             some: {
-              primaryId: params.id,
+              primaryId: id,
             },
           },
         },
@@ -55,11 +56,12 @@ export async function GET(
 // PUT /api/assets/[id] - Asset aktualisieren
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const data = await request.json();
-    
+
     // Berechne CIA Average
     let ciaAverage = 0;
     if (data.confidentiality && data.integrity && data.availability) {
@@ -67,7 +69,7 @@ export async function PUT(
     }
 
     const asset = await prisma.asset.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: data.name,
         description: data.description,
@@ -96,11 +98,12 @@ export async function PUT(
 // DELETE /api/assets/[id]
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.asset.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

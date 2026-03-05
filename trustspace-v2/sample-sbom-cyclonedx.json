@@ -1,0 +1,214 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2024-01-15T10:30:00Z",
+    "tools": [
+      {
+        "vendor": "TrustSpace",
+        "name": "SBOM Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "bom-ref": "pkg:npm/trustspace-web-app@1.0.0",
+      "type": "application",
+      "name": "TrustSpace Web App",
+      "version": "1.0.0",
+      "description": "Web application for risk management",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:npm/react@18.2.0",
+      "type": "library",
+      "name": "react",
+      "version": "18.2.0",
+      "description": "React is a JavaScript library for creating user interfaces",
+      "purl": "pkg:npm/react@18.2.0",
+      "supplier": {
+        "name": "Facebook Inc."
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f42dbbe8b0c6c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/lodash@4.17.20",
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.20",
+      "description": "Lodash modular utilities",
+      "purl": "pkg:npm/lodash@4.17.20",
+      "supplier": {
+        "name": "John-David Dalton"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/log4js@6.4.1",
+      "type": "library",
+      "name": "log4js",
+      "version": "6.4.1",
+      "description": "Port of Log4j to work with node",
+      "purl": "pkg:npm/log4js@6.4.1",
+      "supplier": {
+        "name": "Gareth Jones"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a1"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/express@4.18.2",
+      "type": "framework",
+      "name": "express",
+      "version": "4.18.2",
+      "description": "Fast, unopinionated, minimalist web framework",
+      "purl": "pkg:npm/express@4.18.2",
+      "supplier": {
+        "name": "TJ Holowaychuk"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a1b2"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/moment@2.29.1",
+      "type": "library",
+      "name": "moment",
+      "version": "2.29.1",
+      "description": "Parse, validate, manipulate, and display dates",
+      "purl": "pkg:npm/moment@2.29.1",
+      "supplier": {
+        "name": "Tim Wood"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a1b2c3"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/axios@0.21.1",
+      "type": "library",
+      "name": "axios",
+      "version": "0.21.1",
+      "description": "Promise based HTTP client for the browser and node.js",
+      "purl": "pkg:npm/axios@0.21.1",
+      "supplier": {
+        "name": "Matt Zabriskie"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a1b2c3d4"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:npm/trustspace-web-app@1.0.0",
+      "dependsOn": [
+        "pkg:npm/react@18.2.0",
+        "pkg:npm/express@4.18.2",
+        "pkg:npm/axios@0.21.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/react@18.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/express@4.18.2",
+      "dependsOn": [
+        "pkg:npm/lodash@4.17.20"
+      ]
+    },
+    {
+      "ref": "pkg:npm/axios@0.21.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lodash@4.17.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/log4js@6.4.1",
+      "dependsOn": [
+        "pkg:npm/moment@2.29.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/moment@2.29.1",
+      "dependsOn": []
+    }
+  ]
+}

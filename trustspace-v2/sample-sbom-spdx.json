@@ -1,0 +1,149 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "TrustSpace Mobile App SBOM",
+  "documentNamespace": "https://trustspace.com/spdx/mobile-app-v2.1.0",
+  "creationInfo": {
+    "created": "2024-01-15T14:30:00Z",
+    "creators": [
+      "Tool: TrustSpace SPDX Generator v1.0"
+    ]
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-MainApp",
+      "name": "TrustSpace Mobile App",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright 2024 TrustSpace GmbH",
+      "versionInfo": "2.1.0",
+      "supplier": "Organization: TrustSpace GmbH"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-SpringBoot",
+      "name": "spring-boot-starter",
+      "downloadLocation": "https://repo1.maven.org/maven2/org/springframework/boot/spring-boot-starter/2.7.0/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "Copyright 2024 Pivotal Software Inc.",
+      "versionInfo": "2.7.0",
+      "supplier": "Organization: Pivotal Software Inc.",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.springframework.boot/spring-boot-starter@2.7.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Jackson",
+      "name": "jackson-core",
+      "downloadLocation": "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.13.3/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "Copyright 2024 FasterXML LLC",
+      "versionInfo": "2.13.3",
+      "supplier": "Organization: FasterXML LLC",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b2c3d4e5f6789012345678901234567890123456789012345678901234a1"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/com.fasterxml.jackson.core/jackson-core@2.13.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Log4j",
+      "name": "log4j-core",
+      "downloadLocation": "https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core/2.17.1/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "Copyright 2024 Apache Software Foundation",
+      "versionInfo": "2.17.1",
+      "supplier": "Organization: Apache Software Foundation",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c3d4e5f6789012345678901234567890123456789012345678901234a1b2"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-MySQL",
+      "name": "mysql-connector-java",
+      "downloadLocation": "https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.29/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "GPL-2.0-with-classpath-exception",
+      "licenseDeclared": "GPL-2.0-with-classpath-exception",
+      "copyrightText": "Copyright 2024 Oracle Corporation",
+      "versionInfo": "8.0.29",
+      "supplier": "Organization: Oracle Corporation",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "d4e5f6789012345678901234567890123456789012345678901234a1b2c3"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/mysql/mysql-connector-java@8.0.29"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-MainApp"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-MainApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-SpringBoot"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-MainApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Log4j"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-MainApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-MySQL"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-SpringBoot",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Jackson"
+    }
+  ]
+}

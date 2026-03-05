@@ -28,6 +28,7 @@ model Organization {
   findings    Finding[]
   audits      Audit[]
   auditCalendar AuditCalendar[]
+  sbomDocuments SbomDocument[]
 
   @@map("organizations")
 }
@@ -64,6 +65,7 @@ model Asset {
   linkedAssets      LinkedAsset[] @relation("PrimaryAsset")
   linkedTo          LinkedAsset[] @relation("SecondaryAsset")
   riskThreats       RiskThreat[]
+  sbomDocuments     SbomDocument[]
 
   @@map("assets")
 }
@@ -373,4 +375,65 @@ model AuditCalendar {
   audit       Audit?       @relation(fields: [auditId], references: [id])
 
   @@map("audit_calendar")
+}
+
+// SBOM Models
+model SbomDocument {
+  id            String   @id @default(cuid())
+  organizationId String
+  assetId       String
+  format        String   // "cyclonedx" or "spdx"
+  versionLabel  String   // e.g., "v1.0.0"
+  isLatest      Boolean  @default(true)
+  serialNumber  String?  // CycloneDX serial number
+  rawJson       String   // Complete original SBOM JSON
+  uploadedBy    String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset         Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  components    SbomComponent[]
+
+  @@map("sbom_documents")
+}
+
+model SbomComponent {
+  id              String   @id @default(cuid())
+  sbomDocumentId  String
+  purl            String?  // Package URL
+  name            String
+  version         String?
+  supplier        String?
+  licenseSpdx     String?
+  hashSha256      String?
+  dependencyType  String   @default("unknown") // "direct", "transitive", "unknown"
+  completeness    String   @default("incomplete") // "complete", "incomplete", "no-assertion"
+
+  createdAt       DateTime @default(now())
+
+  sbomDocument    SbomDocument           @relation(fields: [sbomDocumentId], references: [id], onDelete: Cascade)
+  vulnerabilities VexVulnerability[]
+
+  @@map("sbom_components")
+}
+
+model VexVulnerability {
+  id              String   @id @default(cuid())
+  componentId     String
+  cveId           String   // e.g., "CVE-2023-1234"
+  cvssScore       Float?
+  severity        String   // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  vexStatus       String   @default("under_investigation") // "affected", "not_affected", "fixed", "under_investigation"
+  remediation     String?
+  lastCheckedAt   DateTime @default(now())
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  component       SbomComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, cveId])
+  @@map("vex_vulnerabilities")
 }

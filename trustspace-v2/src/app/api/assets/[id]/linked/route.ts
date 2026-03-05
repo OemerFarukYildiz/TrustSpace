@@ -4,11 +4,12 @@ import { prisma } from "@/lib/db";
 // GET /api/assets/[id]/linked - Alle verknüpften Assets für ein Asset
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const linkedAssets = await prisma.linkedAsset.findMany({
-      where: { primaryId: params.id },
+      where: { primaryId: id },
       include: {
         secondaryAsset: {
           select: {
@@ -38,14 +39,15 @@ export async function GET(
 // POST /api/assets/[id]/linked - Asset verknüpfen
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const { secondaryId } = await request.json();
 
     const linkedAsset = await prisma.linkedAsset.create({
       data: {
-        primaryId: params.id,
+        primaryId: id,
         secondaryId,
         organizationId: "default",
       },
@@ -53,7 +55,7 @@ export async function POST(
 
     // Markiere Schritt 2 als abgeschlossen
     await prisma.asset.update({
-      where: { id: params.id },
+      where: { id },
       data: { step2Completed: true },
     });
 
@@ -67,7 +69,7 @@ export async function POST(
 // DELETE /api/assets/[id]/linked - Verknüpfung entfernen
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url);

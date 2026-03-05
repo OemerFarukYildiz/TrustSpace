@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface Asset {
@@ -60,6 +60,53 @@ interface ThreatScenario {
   description: string;
   category: string;
   alreadyAssigned?: boolean;
+}
+
+interface SBOM {
+  id: string;
+  format: string;
+  versionLabel: string;
+  isLatest: boolean;
+  componentsCount: number;
+  vulnerabilitySummary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SBOMDetail {
+  id: string;
+  format: string;
+  versionLabel: string;
+  componentsCount: number;
+  vulnerabilitySummary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  components: Array<{
+    id: string;
+    name: string;
+    version?: string;
+    purl?: string;
+    supplier?: string;
+    licenseSpdx?: string;
+    dependencyType: string;
+    vulnerabilities: Array<{
+      id: string;
+      cveId: string;
+      severity: string;
+      cvssScore?: number;
+      vexStatus: string;
+    }>;
+  }>;
 }
 
 // CIA Calculator Modal
@@ -225,6 +272,258 @@ function CIACalculatorModal({
                   {protectionNeed.label}
                 </span>
               </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-[#0066FF] hover:bg-blue-700"
+              disabled={loading}
+              onClick={handleSave}
+            >
+              {loading ? "Saving..." : "Save Calculation"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Risk Calculation Modal
+function RiskCalculationModal({
+  isOpen,
+  onClose,
+  risk,
+  asset,
+  onCalculated,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  risk: RiskThreat | null;
+  asset: Asset | null;
+  onCalculated: () => void;
+}) {
+  const [bruttoProbability, setBruttoProbability] = useState(1);
+  const [bruttoImpact, setBruttoImpact] = useState(1);
+  const [nettoProbability, setNettoProbability] = useState(1);
+  const [nettoImpact, setNettoImpact] = useState(1);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (risk && isOpen) {
+      setBruttoProbability(risk.bruttoProbability || 1);
+      setBruttoImpact(risk.bruttoImpact || 1);
+      setNettoProbability(risk.nettoProbability || 1);
+      setNettoImpact(risk.nettoImpact || 1);
+    }
+  }, [risk, isOpen]);
+
+  if (!isOpen || !risk || !asset) return null;
+
+  // Berechnung mit CIA-Werten
+  const ciaFactor = asset.ciaAverage || 1;
+  const bruttoScore = Math.round(bruttoProbability * bruttoImpact * ciaFactor);
+  const nettoScore = Math.round(nettoProbability * nettoImpact * ciaFactor);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/risk-threats/${risk.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bruttoProbability,
+          bruttoImpact,
+          bruttoScore,
+          nettoProbability,
+          nettoImpact,
+          nettoScore,
+        }),
+      });
+
+      if (res.ok) {
+        onCalculated();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Failed to save risk calculation:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRiskLevel = (score: number) => {
+    if (score <= 5) return { label: "Low", color: "bg-green-100 text-green-800" };
+    if (score <= 10) return { label: "Medium", color: "bg-yellow-100 text-yellow-800" };
+    if (score <= 20) return { label: "High", color: "bg-orange-100 text-orange-800" };
+    return { label: "Critical", color: "bg-red-100 text-red-800" };
+  };
+
+  const bruttoLevel = getRiskLevel(bruttoScore);
+  const nettoLevel = getRiskLevel(nettoScore);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Calculate Risk</h2>
+            <p className="text-sm text-gray-500">
+              {risk.threatScenario.code} - {risk.threatScenario.name}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* CIA Values Display */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-blue-900">Protection Need (CIA)</span>
+              <span className="text-lg font-bold text-blue-900">{ciaFactor.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-4 text-sm text-blue-700">
+              <span>C: {asset.confidentiality}</span>
+              <span>I: {asset.integrity}</span>
+              <span>A: {asset.availability}</span>
+            </div>
+          </div>
+
+          {/* Brutto Risk */}
+          <div className="space-y-4">
+            <h3 className="font-medium text-gray-900">Gross Risk (Without Controls)</h3>
+
+            <div>
+              <label className="text-sm text-gray-600 block mb-2">
+                Probability (1-5)
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setBruttoProbability(value)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      bruttoProbability === value
+                        ? "bg-blue-500 text-white border-blue-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-600 block mb-2">
+                Impact (1-5)
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setBruttoImpact(value)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      bruttoImpact === value
+                        ? "bg-blue-500 text-white border-blue-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Gross Risk Score</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">
+                    {bruttoProbability} × {bruttoImpact} × {ciaFactor.toFixed(1)} =
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${bruttoLevel.color}`}>
+                    {bruttoScore} ({bruttoLevel.label})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Netto Risk */}
+          <div className="space-y-4">
+            <h3 className="font-medium text-gray-900">Net Risk (With Controls)</h3>
+
+            <div>
+              <label className="text-sm text-gray-600 block mb-2">
+                Residual Probability (1-5)
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setNettoProbability(value)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      nettoProbability === value
+                        ? "bg-green-500 text-white border-green-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-600 block mb-2">
+                Residual Impact (1-5)
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setNettoImpact(value)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      nettoImpact === value
+                        ? "bg-green-500 text-white border-green-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Net Risk Score</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">
+                    {nettoProbability} × {nettoImpact} × {ciaFactor.toFixed(1)} =
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${nettoLevel.color}`}>
+                    {nettoScore} ({nettoLevel.label})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Reduction */}
+          <div className="bg-green-50 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-green-900">Risk Reduction</span>
+              <span className="text-lg font-bold text-green-900">
+                {bruttoScore > 0 ? Math.round(((bruttoScore - nettoScore) / bruttoScore) * 100) : 0}%
+              </span>
             </div>
           </div>
 
@@ -769,17 +1068,27 @@ export default function AssetDetailPage() {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [linkedAssets, setLinkedAssets] = useState<LinkedAsset[]>([]);
   const [riskThreats, setRiskThreats] = useState<RiskThreat[]>([]);
-  const [activeTab, setActiveTab] = useState("calculation");
+  const [activeTab, setActiveTab] = useState(
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("tab") || "calculation"
+      : "calculation"
+  );
   const [loading, setLoading] = useState(true);
   const [isCIAModalOpen, setIsCIAModalOpen] = useState(false);
   const [isAddThreatModalOpen, setIsAddThreatModalOpen] = useState(false);
   const [isLinkAssetModalOpen, setIsLinkAssetModalOpen] = useState(false);
   const [editingRisk, setEditingRisk] = useState<RiskThreat | null>(null);
+  const [isRiskCalculationModalOpen, setIsRiskCalculationModalOpen] = useState(false);
+  const [sboms, setSboms] = useState<SBOM[]>([]);
+  const [selectedSbom, setSelectedSbom] = useState<SBOMDetail | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
     loadAsset();
     loadLinkedAssets();
     loadRiskThreats();
+    loadSBOMs();
   }, [id]);
 
   const loadAsset = async () => {
@@ -817,6 +1126,18 @@ export default function AssetDetailPage() {
       }
     } catch (error) {
       console.error("Failed to load risk threats:", error);
+    }
+  };
+
+  const loadSBOMs = async () => {
+    try {
+      const res = await fetch(`/api/assets/${id}/sbom`);
+      if (res.ok) {
+        const data = await res.json();
+        setSboms(data);
+      }
+    } catch (error) {
+      console.error("Failed to load SBOMs:", error);
     }
   };
 
@@ -1027,6 +1348,9 @@ export default function AssetDetailPage() {
                 <TabsTrigger value="linked" className="flex-1 data-[state=active]:bg-white">
                   Linked Assets ({linkedAssets.length})
                 </TabsTrigger>
+                <TabsTrigger value="sbom" className="flex-1 data-[state=active]:bg-white">
+                  SBOM ({sboms.length})
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="calculation" className="mt-0">
@@ -1087,10 +1411,13 @@ export default function AssetDetailPage() {
                       const nettoLevel = getRiskLevel(rt.nettoScore);
                       
                       return (
-                        <div 
-                          key={rt.id} 
+                        <div
+                          key={rt.id}
                           className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 cursor-pointer"
-                          onClick={() => setEditingRisk(rt)}
+                          onClick={() => {
+                            setEditingRisk(rt);
+                            setIsRiskCalculationModalOpen(true);
+                          }}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -1149,6 +1476,239 @@ export default function AssetDetailPage() {
                   />
                 )}
               </TabsContent>
+
+              <TabsContent value="sbom" className="mt-0">
+                {asset?.category !== "hardware" && asset?.category !== "software" ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                    <Package className="w-12 h-12 mb-4 text-gray-300" />
+                    <p className="text-lg">SBOM not applicable</p>
+                    <p className="text-sm mt-1 text-center">
+                      Software Bill of Materials is only available for hardware and software assets
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm text-gray-500">
+                        {sboms.length} SBOM(s) uploaded
+                      </p>
+                      <Button
+                        className="bg-[#0066FF] hover:bg-blue-700"
+                        onClick={() => setIsUploadModalOpen(true)}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload SBOM
+                      </Button>
+                    </div>
+
+                {sboms.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                    <Package className="w-12 h-12 mb-4 text-gray-300" />
+                    <p className="text-lg">No SBOM uploaded</p>
+                    <p className="text-sm mt-1">Upload a CycloneDX or SPDX SBOM for vulnerability scanning</p>
+                    <Button
+                      className="mt-4 bg-[#0066FF]"
+                      onClick={() => setIsUploadModalOpen(true)}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload SBOM
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Link to SBOM Overview */}
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                      <p className="text-sm text-blue-700">View all SBOMs and vulnerability details</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-100"
+                        onClick={() => router.push("/risks/sbom")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        Open SBOM Overview
+                      </Button>
+                    </div>
+                    {sboms.map((sbom) => (
+                      <div
+                        key={sbom.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedSbom?.id === sbom.id ? "border-blue-300 bg-blue-50" : "border-gray-100 hover:border-gray-200"}`}
+                        onClick={async () => {
+                          if (selectedSbom?.id === sbom.id) {
+                            setSelectedSbom(null);
+                            return;
+                          }
+                          try {
+                            const res = await fetch(`/api/sbom/${sbom.id}`);
+                            if (res.ok) {
+                              const data = await res.json();
+                              setSelectedSbom(data);
+                            }
+                          } catch (error) {
+                            console.error("Failed to load SBOM details:", error);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded uppercase">
+                                {sbom.format}
+                              </span>
+                              <span className="font-medium text-gray-900">{sbom.versionLabel}</span>
+                              {sbom.isLatest && (
+                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                  Latest
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 mb-2">
+                              {sbom.componentsCount} components • {new Date(sbom.createdAt).toLocaleDateString()}
+                            </p>
+
+                            {/* Vulnerability Summary */}
+                            <div className="flex items-center gap-2">
+                              {sbom.vulnerabilitySummary.total === 0 ? (
+                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                  No vulnerabilities
+                                </span>
+                              ) : (
+                                <>
+                                  {sbom.vulnerabilitySummary.critical > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
+                                      {sbom.vulnerabilitySummary.critical} Critical
+                                    </span>
+                                  )}
+                                  {sbom.vulnerabilitySummary.high > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
+                                      {sbom.vulnerabilitySummary.high} High
+                                    </span>
+                                  )}
+                                  {sbom.vulnerabilitySummary.medium > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
+                                      {sbom.vulnerabilitySummary.medium} Medium
+                                    </span>
+                                  )}
+                                  {sbom.vulnerabilitySummary.low > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                      {sbom.vulnerabilitySummary.low} Low
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 ml-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const response = await fetch(`/api/sbom/${sbom.id}/scan`, {
+                                    method: 'POST',
+                                  });
+                                  if (response.ok) {
+                                    // Refresh SBOM list after scan
+                                    loadSBOMs();
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to trigger scan:', error);
+                                }
+                              }}
+                            >
+                              Scan
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/api/sbom/${sbom.id}/export`, '_blank');
+                              }}
+                            >
+                              <Download className="w-4 h-4 mr-1" />
+                              Export
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* SBOM Detail Panel */}
+                    {selectedSbom && (
+                      <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
+                        <div className="bg-blue-50 px-4 py-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs bg-white px-2 py-0.5 rounded uppercase border border-blue-200">
+                              {selectedSbom.format}
+                            </span>
+                            <span className="font-medium text-gray-900">{selectedSbom.versionLabel}</span>
+                            <span className="text-sm text-gray-500">{selectedSbom.components.length} components</span>
+                          </div>
+                          <button onClick={() => setSelectedSbom(null)} className="text-gray-400 hover:text-gray-600">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Vulnerability Summary */}
+                        {selectedSbom.vulnerabilitySummary.total > 0 && (
+                          <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-3">
+                            <AlertTriangle className="w-4 h-4 text-red-500" />
+                            <span className="text-sm font-medium text-red-700">
+                              {selectedSbom.vulnerabilitySummary.total} vulnerabilities found
+                            </span>
+                            <div className="flex gap-2">
+                              {selectedSbom.vulnerabilitySummary.critical > 0 && <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">{selectedSbom.vulnerabilitySummary.critical} Critical</span>}
+                              {selectedSbom.vulnerabilitySummary.high > 0 && <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">{selectedSbom.vulnerabilitySummary.high} High</span>}
+                              {selectedSbom.vulnerabilitySummary.medium > 0 && <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">{selectedSbom.vulnerabilitySummary.medium} Medium</span>}
+                              {selectedSbom.vulnerabilitySummary.low > 0 && <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">{selectedSbom.vulnerabilitySummary.low} Low</span>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Component List */}
+                        <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                          {selectedSbom.components.map((comp) => (
+                            <div key={comp.id} className="px-4 py-3 flex items-start justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm text-gray-900">{comp.name}</span>
+                                  {comp.version && <span className="text-xs text-gray-400 font-mono">v{comp.version}</span>}
+                                  {comp.licenseSpdx && <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{comp.licenseSpdx}</span>}
+                                </div>
+                                {comp.vulnerabilities.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {comp.vulnerabilities.map((vuln) => (
+                                      <span
+                                        key={vuln.id}
+                                        className={`text-xs px-2 py-0.5 rounded font-mono ${
+                                          vuln.severity === "CRITICAL" ? "bg-red-100 text-red-700" :
+                                          vuln.severity === "HIGH" ? "bg-orange-100 text-orange-700" :
+                                          vuln.severity === "MEDIUM" ? "bg-yellow-100 text-yellow-700" :
+                                          "bg-blue-100 text-blue-700"
+                                        }`}
+                                      >
+                                        {vuln.cveId} · {vuln.severity}{vuln.cvssScore ? ` (${vuln.cvssScore})` : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {comp.vulnerabilities.length === 0 && (
+                                <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                  </>
+                )}
+              </TabsContent>
             </Tabs>
           </div>
         </div>
@@ -1175,6 +1735,122 @@ export default function AssetDetailPage() {
         assetId={id as string}
         onLinked={loadLinkedAssets}
       />
+
+      <RiskCalculationModal
+        isOpen={isRiskCalculationModalOpen}
+        onClose={() => {
+          setIsRiskCalculationModalOpen(false);
+          setEditingRisk(null);
+        }}
+        risk={editingRisk}
+        asset={asset}
+        onCalculated={loadRiskThreats}
+      />
+
+      {/* SBOM Upload Modal */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Upload SBOM</h2>
+              <button
+                onClick={() => setIsUploadModalOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+                disabled={uploadLoading}
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const file = formData.get("file") as File;
+                const versionLabel = formData.get("versionLabel") as string;
+
+                if (!file || !versionLabel) {
+                  alert("Please select a file and enter a version label");
+                  return;
+                }
+
+                setUploadLoading(true);
+                try {
+                  formData.append("assetId", id as string);
+
+                  const response = await fetch("/api/sbom/upload", {
+                    method: "POST",
+                    body: formData,
+                  });
+
+                  if (response.ok) {
+                    loadSBOMs();
+                    setIsUploadModalOpen(false);
+                    setActiveTab("sbom");
+                  } else {
+                    const error = await response.json();
+                    alert(`Upload failed: ${error.error}`);
+                  }
+                } catch (error) {
+                  console.error("Upload failed:", error);
+                  alert("Upload failed");
+                } finally {
+                  setUploadLoading(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">
+                  Version Label
+                </label>
+                <input
+                  type="text"
+                  name="versionLabel"
+                  placeholder="e.g., v1.0.0"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">
+                  SBOM File (JSON)
+                </label>
+                <input
+                  type="file"
+                  name="file"
+                  accept=".json"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Supports CycloneDX and SPDX JSON formats
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="flex-1"
+                  disabled={uploadLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-[#0066FF] hover:bg-blue-700"
+                  disabled={uploadLoading}
+                >
+                  {uploadLoading ? "Uploading..." : "Upload & Scan"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

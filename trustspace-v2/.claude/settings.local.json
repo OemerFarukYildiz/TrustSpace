@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E '\\.(md|MD)$')",
+      "Bash(xargs ls -la)",
+      "WebSearch",
+      "Bash(npm install)",
+      "Bash(npm install --legacy-peer-deps)",
+      "Bash(npx prisma generate)",
+      "Bash(npx prisma migrate dev --name init)",
+      "Bash(npm run db:seed)",
+      "Bash(npx tsx --env-file=.env prisma/seed.ts)",
+      "Bash(npm run dev)",
+      "Bash(npx prisma migrate dev --name add-sbom-tables)",
+      "Bash(npx prisma migrate reset --force)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"mach\" npx prisma migrate reset --force)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(taskkill /F /PID 7136)",
+      "Bash(taskkill //F //PID 7136)",
+      "Bash(findstr :3001)",
+      "Bash(taskkill //F //PID 19360)",
+      "Bash(taskkill //F //IM node.exe)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
