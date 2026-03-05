@@ -1,0 +1,376 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  industry    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assets          Asset[]
+  linkedAssets    LinkedAsset[]
+  threatScenarios ThreatScenario[]
+  riskThreats     RiskThreat[]
+  risks       Risk[]
+  controls    Control[]
+  policies    Policy[]
+  documentFiles   DocumentFile[]
+  vendors     Vendor[]
+  employees   Employee[]
+  findings    Finding[]
+  audits      Audit[]
+  auditCalendar AuditCalendar[]
+
+  @@map("organizations")
+}
+
+model Asset {
+  id                String   @id @default(cuid())
+  organizationId    String
+  name              String
+  type              String   // primary, secondary
+  category          String   // information, process, hardware, software, personnel
+  description       String?
+  ownerId           String?
+  department        String?
+  
+  // CIA-Triad (1-3 für Schutzbedarfsberechnung)
+  confidentiality   Int      @default(0) // 0 = nicht berechnet, 1-3
+  integrity         Int      @default(0) // 0 = nicht berechnet, 1-3
+  availability      Int      @default(0) // 0 = nicht berechnet, 1-3
+  ciaAverage        Float    @default(0) // Durchschnitt der 3 Werte
+  
+  // Workflow Status
+  step1Completed    Boolean  @default(false) // CIA Berechnet
+  step2Completed    Boolean  @default(false) // Assets verknüpft
+  step3Completed    Boolean  @default(false) // Bedrohungen zugewiesen
+  step4Completed    Boolean  @default(false) // Brutto/Netto Risiko
+  step5Completed    Boolean  @default(false) // Maßnahmen gemappt
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner             Employee?    @relation(fields: [ownerId], references: [id])
+  risks             Risk[]
+  linkedAssets      LinkedAsset[] @relation("PrimaryAsset")
+  linkedTo          LinkedAsset[] @relation("SecondaryAsset")
+  riskThreats       RiskThreat[]
+
+  @@map("assets")
+}
+
+model LinkedAsset {
+  id              String   @id @default(cuid())
+  organizationId  String
+  primaryId       String   // Das Haupt-Asset
+  secondaryId     String   // Das verknüpfte Asset
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  primaryAsset    Asset    @relation("PrimaryAsset", fields: [primaryId], references: [id], onDelete: Cascade)
+  secondaryAsset  Asset    @relation("SecondaryAsset", fields: [secondaryId], references: [id], onDelete: Cascade)
+
+  @@unique([primaryId, secondaryId])
+  @@map("linked_assets")
+}
+
+model ThreatScenario {
+  id              String   @id @default(cuid())
+  organizationId  String
+  code            String   // B009, B006, etc.
+  name            String
+  description     String?
+  category        String   // G: Gewalt, H: Höhere Gewalt, etc.
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  riskThreats     RiskThreat[]
+
+  @@unique([organizationId, code])
+  @@map("threat_scenarios")
+}
+
+model RiskThreat {
+  id                String   @id @default(cuid())
+  organizationId    String
+  assetId           String
+  threatId          String
+  
+  // Brutto-Risiko
+  bruttoProbability Int      @default(1) // 1-5
+  bruttoImpact      Int      @default(1) // 1-5
+  bruttoScore       Int      @default(1)
+  
+  // Netto-Risiko (nach Maßnahmen)
+  nettoProbability  Int      @default(1)
+  nettoImpact       Int      @default(1)
+  nettoScore        Int      @default(1)
+  
+  // Controls die diesem Threat gemappt sind
+  mappedControls    String?  // JSON array of control IDs
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset             Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  threat            ThreatScenario   @relation(fields: [threatId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, threatId])
+  @@map("risk_threats")
+}
+
+model Risk {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  assetId             String?
+  title               String
+  description         String?
+  
+  // Brutto-Risiko (ohne Maßnahmen)
+  bruttoProbability   Int      @default(1) // 1-5
+  bruttoImpact        Int      @default(1) // 1-5
+  bruttoScore         Int      @default(1)
+  
+  // Netto-Risiko (mit Maßnahmen)
+  nettoProbability    Int      @default(1)
+  nettoImpact         Int      @default(1)
+  nettoScore          Int      @default(1)
+  
+  status              String   @default("open") // open, in_progress, mitigated, accepted
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset               Asset?       @relation(fields: [assetId], references: [id])
+  controls            Control[]
+  findings            Finding[]
+
+  @@map("risks")
+}
+
+model Control {
+  id                String   @id @default(cuid())
+  organizationId    String
+  code              String   // z.B. "A.5.1", "A.5.2"
+  title             String
+  description       String?
+  justification     String?  // Begründung für SOA
+  isApplicable      Boolean  @default(true)
+  implementation    String?  // Implementierungsstatus
+  responsibleId     String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  responsible       Employee?    @relation(fields: [responsibleId], references: [id])
+  risks             Risk[]
+  findings          Finding[]
+  policies          Policy[]
+
+  @@map("controls")
+}
+
+model Policy {
+  id              String   @id @default(cuid())
+  organizationId  String
+  title           String
+  content         String?  // Rich text HTML content
+  status          String   @default("draft") // draft, review, approved, expired
+  version         Int      @default(1)
+  fileUrl         String?
+  fileType        String?  // pdf, docx
+  controlId       String?
+  
+  // Document metadata
+  category        String   @default("policies") // policies, procedural, work, external
+  approverId      String?
+  reviewDate      DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  control         Control?     @relation(fields: [controlId], references: [id])
+
+  @@map("policies")
+}
+
+model DocumentFile {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  type            String   // folder, docx, xlsx, pdf, txt, image, other
+  parentId        String?  // null = root level
+  size            Int      @default(0)
+  
+  // For editable content
+  content         String?  // HTML content for Word docs
+  sheetData       String?  // JSON array for Excel data
+  
+  // For binary files (images, PDFs)
+  fileData        String?  // Base64 encoded file data
+  mimeType        String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent          DocumentFile? @relation("FolderStructure", fields: [parentId], references: [id])
+  children        DocumentFile[] @relation("FolderStructure")
+
+  @@map("document_files")
+}
+
+model Vendor {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  name                String
+  category            String
+  services            String?
+  trustCenterUrl      String?
+  certifications      String?  // JSON array
+  dpoContact          String?
+  gdprCompliant       Boolean?
+  
+  // Bewertung
+  assessmentStatus    String   @default("none") // none, sent, evaluated, approved
+  assessmentData      String?  // JSON mit Fragebogen-Antworten
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assessments         VendorAssessment[]
+
+  @@map("vendors")
+}
+
+model VendorAssessment {
+  id          String   @id @default(cuid())
+  vendorId    String
+  question    String
+  answer      String   // yes, no, partial
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_assessments")
+}
+
+model Employee {
+  id              String   @id @default(cuid())
+  organizationId  String
+  email           String
+  firstName       String
+  lastName        String
+  role            String   // ISB, Admin, QM, etc.
+  department      String?
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assets          Asset[]
+  controls        Control[]
+  auditOwners     AuditOwner[]
+  findings        Finding[]
+
+  @@unique([organizationId, email])
+  @@map("employees")
+}
+
+model Finding {
+  id              String   @id @default(cuid())
+  organizationId  String
+  title           String
+  description     String?
+  type            String   // audit_finding, incident, improvement, task
+  priority        String   @default("medium") // low, medium, high, critical
+  status          String   @default("open") // open, in_progress, review, closed
+  dueDate         DateTime?
+  assigneeId      String?
+  
+  // Verknüpfungen
+  riskId          String?
+  controlId       String?
+  auditId         String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee        Employee?    @relation(fields: [assigneeId], references: [id])
+  risk            Risk?        @relation(fields: [riskId], references: [id])
+  control         Control?     @relation(fields: [controlId], references: [id])
+  audit           Audit?       @relation(fields: [auditId], references: [id])
+
+  @@map("findings")
+}
+
+model Audit {
+  id              String   @id @default(cuid())
+  organizationId  String
+  title           String
+  type            String   // Internal Audit, External Audit, Certification, Review
+  scope           String?
+  plannedDate     DateTime
+  actualDate      DateTime?
+  description     String?
+  status          String   @default("open") // open, close
+  documents       String?  // JSON array of document metadata
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owners          AuditOwner[]
+  findings        Finding[]
+  auditCalendar   AuditCalendar[]
+
+  @@map("audits")
+}
+
+model AuditOwner {
+  id          String   @id @default(cuid())
+  auditId     String
+  employeeId  String
+  createdAt   DateTime @default(now())
+
+  audit       Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, employeeId])
+  @@map("audit_owners")
+}
+
+model AuditCalendar {
+  id          String   @id @default(cuid())
+  organizationId String
+  auditId     String?
+  title       String
+  date        DateTime
+  type        String   // audit, finding_deadline, policy_review
+  description String?
+  
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  audit       Audit?       @relation(fields: [auditId], references: [id])
+
+  @@map("audit_calendar")
+}

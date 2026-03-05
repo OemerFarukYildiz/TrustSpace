@@ -1,0 +1,20 @@
+services:
+  collabora:
+    image: collabora/code:latest
+    container_name: trustspace-collabora
+    ports:
+      - "9980:9980"
+    environment:
+      - username=admin
+      - password=trustspace2024
+      - DONT_GEN_SSL_CERT=true
+      # WOPI Host: host.docker.internal damit Collabora die lokale App erreicht
+      - "aliasgroup1=http://host.docker.internal:3000"
+      - "extra_params=--o:ssl.enable=false --o:net.post_allow.host[0]=.+ --o:storage.wopi.host[0]=host.docker.internal:3000"
+    cap_add:
+      - MKNOD
+    privileged: true
+    restart: unless-stopped
+    # Wichtig für Mac Docker Desktop
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
