@@ -7,6 +7,10 @@ on:
 jobs:
   sbom:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./trustspace-v2
+
     steps:
       - uses: actions/checkout@v4
 
