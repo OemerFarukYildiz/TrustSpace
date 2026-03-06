@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 20
 
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
 
       - name: Generate SBOM
         run: npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6 --ignore-npm-errors
