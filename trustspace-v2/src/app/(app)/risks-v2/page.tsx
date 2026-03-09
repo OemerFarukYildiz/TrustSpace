@@ -536,8 +536,7 @@ export default function RisksV2Page() {
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Risiko</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Asset</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Brutto</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Netto</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Brutto → Netto</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">ALE</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Maßnahmen</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Behandlung</th>
@@ -547,7 +546,7 @@ export default function RisksV2Page() {
               <tbody className="divide-y divide-gray-100">
                 {filteredRisks.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
                       <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-gray-300" />
                       Noch keine Risiken angelegt
                     </td>
@@ -558,6 +557,15 @@ export default function RisksV2Page() {
                     try {
                       controlCount = risk.mappedControls ? JSON.parse(risk.mappedControls).length : 0;
                     } catch { /* */ }
+                    const reductionPct = risk.bruttoScore > 0 && risk.nettoScore > 1
+                      ? Math.round(((risk.bruttoScore - risk.nettoScore) / risk.bruttoScore) * 100)
+                      : 0;
+                    const TREATMENT_COLORS: Record<string, string> = {
+                      mitigate: "bg-blue-50 text-blue-700 border-blue-200",
+                      accept: "bg-amber-50 text-amber-700 border-amber-200",
+                      transfer: "bg-purple-50 text-purple-700 border-purple-200",
+                      avoid: "bg-red-50 text-red-700 border-red-200",
+                    };
 
                     return (
                       <tr
@@ -574,22 +582,31 @@ export default function RisksV2Page() {
                         <td className="py-3 px-4">
                           <span className="text-sm text-gray-600">{risk.asset?.name || "—"}</span>
                         </td>
+                        {/* Brutto → Netto flow */}
                         <td className="py-3 px-4">
-                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border", getRiskColor(risk.bruttoScore))}>
-                            {risk.bruttoScore} — {getRiskLabel(risk.bruttoScore)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          {risk.nettoScore > 1 ? (
-                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border", getRiskColor(risk.nettoScore))}>
-                              {risk.nettoScore}
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border", getRiskColor(risk.bruttoScore))}>
+                              {risk.bruttoScore}
                             </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
+                            {risk.nettoScore > 1 && (
+                              <>
+                                <ChevronRight className="h-3 w-3 text-gray-300 flex-shrink-0" />
+                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border", getRiskColor(risk.nettoScore))}>
+                                  {risk.nettoScore}
+                                </span>
+                                {reductionPct > 0 && (
+                                  <span className="text-[10px] text-emerald-600 font-medium ml-0.5">-{reductionPct}%</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-gray-400">{getRiskLabel(risk.bruttoScore)}</span>
                         </td>
                         <td className="py-3 px-4">
                           <span className="text-sm text-gray-600">{formatEUR(risk.annualLossExpectancy)}</span>
+                          {risk.nettoALE !== null && risk.nettoALE !== undefined && risk.nettoALE > 0 && (
+                            <p className="text-[10px] text-emerald-600">→ {formatEUR(risk.nettoALE)}</p>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           {controlCount > 0 ? (
@@ -603,9 +620,11 @@ export default function RisksV2Page() {
                         </td>
                         <td className="py-3 px-4">
                           {risk.riskTreatment ? (
-                            <span className="text-xs text-gray-600">{TREATMENT_LABELS[risk.riskTreatment] || risk.riskTreatment}</span>
+                            <span className={cn("text-xs px-2 py-0.5 rounded-full border font-medium", TREATMENT_COLORS[risk.riskTreatment] || "bg-gray-50 text-gray-600 border-gray-200")}>
+                              {TREATMENT_LABELS[risk.riskTreatment] || risk.riskTreatment}
+                            </span>
                           ) : (
-                            <span className="text-xs text-gray-400">—</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-400">Offen</span>
                           )}
                         </td>
                         <td className="py-3 px-4">

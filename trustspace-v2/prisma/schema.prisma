@@ -456,7 +456,9 @@ model Audit {
   description     String?
   status          String   @default("open") // open, close
   documents       String?  // JSON array of document metadata
-  
+  recurring       String?  // none, quarterly, semi-annual, annual
+  seriesId        String?  // groups recurring audit instances together
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -28,12 +28,17 @@ export async function GET(request: NextRequest) {
     // Format für Frontend
     const formatted = riskThreats.map((rt) => ({
       id: rt.id,
+      bruttoProbability: rt.bruttoProbability,
+      bruttoImpact: rt.bruttoImpact,
       bruttoScore: rt.bruttoScore,
+      nettoProbability: rt.nettoProbability,
+      nettoImpact: rt.nettoImpact,
       nettoScore: rt.nettoScore,
+      controlsMapped: rt.mappedControls || "[]",
       threatScenario: {
         code: rt.threat.code,
         name: rt.threat.name,
-        description: rt.threat.description,
+        description: rt.threat.description || "",
       },
     }));
 

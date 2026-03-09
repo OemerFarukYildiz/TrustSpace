@@ -14,6 +14,8 @@ interface CategoryStats {
   risksPercent: number;
   assetsPercent: number;
   assetCount: number;
+  calculatedCount?: number;
+  withRisksCount?: number;
 }
 
 interface Activity {
@@ -107,39 +109,6 @@ const categories: CategoryStats[] = [
     assetCount: 0,
   },
 ];
-
-// Circular Progress Component
-function CircularProgress({ percent }: { percent: number }) {
-  const radius = 18;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percent / 100) * circumference;
-
-  return (
-    <div className="relative w-12 h-12">
-      <svg className="w-12 h-12 transform -rotate-90">
-        <circle
-          cx="24"
-          cy="24"
-          r={radius}
-          fill="none"
-          stroke="#E5E7EB"
-          strokeWidth="3"
-        />
-        <circle
-          cx="24"
-          cy="24"
-          r={radius}
-          fill="none"
-          stroke="#3B82F6"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-        />
-      </svg>
-    </div>
-  );
-}
 
 // Activity Icon
 function ActivityIcon({ icon }: { icon: string }) {
@@ -498,33 +467,62 @@ export default function RisksOverviewPage() {
 
       {/* 1. Category Cards - Asset Liste */}
       <div className="grid grid-cols-5 gap-4">
-        {stats.map((cat) => (
-          <div
-            key={cat.category}
-            className="bg-white rounded-lg border border-gray-100 p-5 cursor-pointer hover:shadow-sm transition-shadow"
-            onClick={() => router.push(`/risks/category/${cat.category}`)}
-          >
-            <h3 className="font-semibold text-gray-900 mb-2">{cat.title}</h3>
-            <p className="text-xs text-gray-500 mb-6 line-clamp-3 h-12">{cat.description}</p>
-            
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-              <div className="flex items-center gap-3">
-                <CircularProgress percent={cat.risksPercent} />
-                <div>
-                  <p className="text-xs text-gray-500">With Risks</p>
-                  <p className="text-sm font-semibold text-gray-900">{cat.risksPercent}%</p>
+        {stats.map((cat) => {
+          const withRisks = cat.withRisksCount ?? 0;
+          const calculated = cat.calculatedCount ?? 0;
+          const total = cat.assetCount;
+          const hasIssues = withRisks > 0 && calculated < total;
+          return (
+            <div
+              key={cat.category}
+              className={`bg-white rounded-xl border cursor-pointer hover:shadow-md transition-all group ${hasIssues ? "border-amber-200 hover:border-amber-300" : "border-gray-100 hover:border-blue-200"}`}
+              onClick={() => router.push(`/risks/category/${cat.category}`)}
+            >
+              {/* Card Header */}
+              <div className="p-5 pb-3">
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">{cat.title}</h3>
+                  {total > 0 && (
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2">
+                      {total}
+                    </span>
+                  )}
                 </div>
+                <p className="text-xs text-gray-400 line-clamp-2">{cat.description}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <CircularProgress percent={cat.assetsPercent} />
+
+              {/* Metrics */}
+              <div className="px-5 pb-5 pt-3 border-t border-gray-50 space-y-2.5">
+                {/* Risk assessment progress */}
                 <div>
-                  <p className="text-xs text-gray-500">Calculated</p>
-                  <p className="text-sm font-semibold text-gray-900">{cat.assetsPercent}%</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Risiken</span>
+                    <span className="text-xs font-semibold text-gray-700">{withRisks}/{total}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-400 rounded-full transition-all"
+                      style={{ width: total > 0 ? `${cat.risksPercent}%` : "0%" }}
+                    />
+                  </div>
+                </div>
+                {/* CIA calculation progress */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">CIA berechnet</span>
+                    <span className="text-xs font-semibold text-gray-700">{calculated}/{total}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${cat.assetsPercent === 100 ? "bg-emerald-400" : "bg-amber-400"}`}
+                      style={{ width: total > 0 ? `${cat.assetsPercent}%` : "0%" }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* 2. Dashboard Widgets Row */}

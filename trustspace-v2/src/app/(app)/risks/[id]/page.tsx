@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink, Zap } from "lucide-react";
+import { ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink, Zap } from "lucide-react";
 import Link from "next/link";
 
 interface Asset {
@@ -293,6 +293,100 @@ function CIACalculatorModal({
   );
 }
 
+// Control Mapping Section for V1
+function ControlMappingSection({
+  selectedControls,
+  onToggle,
+}: {
+  selectedControls: Set<string>;
+  onToggle: (code: string) => void;
+}) {
+  const [controls, setControls] = useState<Array<{ id: string; code: string; title: string; status: string; implementationPct: number | null }>>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/controls")
+      .then((r) => r.json())
+      .then((data) => setControls(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = controls.filter((c) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-gray-900 flex items-center gap-2">
+          <Shield className="w-4 h-4 text-blue-600" />
+          Mapped Controls ({selectedControls.size})
+        </h3>
+      </div>
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search controls..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div className="max-h-40 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+        {loading ? (
+          <p className="text-center py-4 text-sm text-gray-400">Loading...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center py-4 text-sm text-gray-400">No controls found</p>
+        ) : (
+          filtered.map((ctrl) => {
+            const isSelected = selectedControls.has(ctrl.code);
+            return (
+              <button
+                key={ctrl.id}
+                onClick={() => onToggle(ctrl.code)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                  isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                    isSelected ? "bg-blue-500 border-blue-500" : "border-gray-300"
+                  }`}
+                >
+                  {isSelected && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs font-mono font-semibold text-gray-600 w-14 flex-shrink-0">{ctrl.code}</span>
+                <span className="text-xs text-gray-700 truncate">{ctrl.title}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+      {selectedControls.size > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {Array.from(selectedControls).map((code) => (
+            <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-xs font-mono text-blue-700">
+              {code}
+              <button onClick={() => onToggle(code)} className="hover:text-red-500">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Risk Calculation Modal
 function RiskCalculationModal({
   isOpen,
@@ -311,6 +405,7 @@ function RiskCalculationModal({
   const [bruttoImpact, setBruttoImpact] = useState(1);
   const [nettoProbability, setNettoProbability] = useState(1);
   const [nettoImpact, setNettoImpact] = useState(1);
+  const [mappedControlsSet, setMappedControlsSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -319,15 +414,31 @@ function RiskCalculationModal({
       setBruttoImpact(risk.bruttoImpact || 1);
       setNettoProbability(risk.nettoProbability || 1);
       setNettoImpact(risk.nettoImpact || 1);
+      try {
+        const mc = risk.controlsMapped ? JSON.parse(risk.controlsMapped) : [];
+        setMappedControlsSet(new Set(Array.isArray(mc) ? mc : []));
+      } catch {
+        setMappedControlsSet(new Set());
+      }
     }
   }, [risk, isOpen]);
 
   if (!isOpen || !risk || !asset) return null;
 
+  const toggleControl = (code: string) => {
+    setMappedControlsSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
   // Berechnung mit CIA-Werten
   const ciaFactor = asset.ciaAverage || 1;
   const bruttoScore = Math.round(bruttoProbability * bruttoImpact * ciaFactor);
   const nettoScore = Math.round(nettoProbability * nettoImpact * ciaFactor);
+  const reductionPct = bruttoScore > 0 ? Math.round(((bruttoScore - nettoScore) / bruttoScore) * 100) : 0;
 
   const handleSave = async () => {
     setLoading(true);
@@ -342,6 +453,7 @@ function RiskCalculationModal({
           nettoProbability,
           nettoImpact,
           nettoScore,
+          mappedControls: JSON.stringify(Array.from(mappedControlsSet)),
         }),
       });
 
@@ -368,7 +480,7 @@ function RiskCalculationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold">Calculate Risk</h2>
@@ -400,9 +512,7 @@ function RiskCalculationModal({
             <h3 className="font-medium text-gray-900">Gross Risk (Without Controls)</h3>
 
             <div>
-              <label className="text-sm text-gray-600 block mb-2">
-                Probability (1-5)
-              </label>
+              <label className="text-sm text-gray-600 block mb-2">Probability (1-5)</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
@@ -410,7 +520,7 @@ function RiskCalculationModal({
                     onClick={() => setBruttoProbability(value)}
                     className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
                       bruttoProbability === value
-                        ? "bg-blue-500 text-white border-blue-500"
+                        ? "bg-red-500 text-white border-red-500"
                         : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                     }`}
                   >
@@ -421,9 +531,7 @@ function RiskCalculationModal({
             </div>
 
             <div>
-              <label className="text-sm text-gray-600 block mb-2">
-                Impact (1-5)
-              </label>
+              <label className="text-sm text-gray-600 block mb-2">Impact (1-5)</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
@@ -431,7 +539,7 @@ function RiskCalculationModal({
                     onClick={() => setBruttoImpact(value)}
                     className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
                       bruttoImpact === value
-                        ? "bg-blue-500 text-white border-blue-500"
+                        ? "bg-red-500 text-white border-red-500"
                         : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                     }`}
                   >
@@ -441,12 +549,12 @@ function RiskCalculationModal({
               </div>
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="bg-red-50 p-3 rounded-lg border border-red-100">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Gross Risk Score</span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-500">
-                    {bruttoProbability} × {bruttoImpact} × {ciaFactor.toFixed(1)} =
+                    {bruttoProbability} x {bruttoImpact} x {ciaFactor.toFixed(1)} =
                   </span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${bruttoLevel.color}`}>
                     {bruttoScore} ({bruttoLevel.label})
@@ -456,14 +564,18 @@ function RiskCalculationModal({
             </div>
           </div>
 
+          {/* Control Mapping */}
+          <ControlMappingSection
+            selectedControls={mappedControlsSet}
+            onToggle={toggleControl}
+          />
+
           {/* Netto Risk */}
           <div className="space-y-4">
             <h3 className="font-medium text-gray-900">Net Risk (With Controls)</h3>
 
             <div>
-              <label className="text-sm text-gray-600 block mb-2">
-                Residual Probability (1-5)
-              </label>
+              <label className="text-sm text-gray-600 block mb-2">Residual Probability (1-5)</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
@@ -482,9 +594,7 @@ function RiskCalculationModal({
             </div>
 
             <div>
-              <label className="text-sm text-gray-600 block mb-2">
-                Residual Impact (1-5)
-              </label>
+              <label className="text-sm text-gray-600 block mb-2">Residual Impact (1-5)</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
@@ -502,12 +612,12 @@ function RiskCalculationModal({
               </div>
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="bg-green-50 p-3 rounded-lg border border-green-100">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Net Risk Score</span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-500">
-                    {nettoProbability} × {nettoImpact} × {ciaFactor.toFixed(1)} =
+                    {nettoProbability} x {nettoImpact} x {ciaFactor.toFixed(1)} =
                   </span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${nettoLevel.color}`}>
                     {nettoScore} ({nettoLevel.label})
@@ -517,13 +627,20 @@ function RiskCalculationModal({
             </div>
           </div>
 
-          {/* Risk Reduction */}
-          <div className="bg-green-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-green-900">Risk Reduction</span>
-              <span className="text-lg font-bold text-green-900">
-                {bruttoScore > 0 ? Math.round(((bruttoScore - nettoScore) / bruttoScore) * 100) : 0}%
+          {/* Risk Reduction Summary */}
+          <div className="bg-gradient-to-r from-red-50 to-green-50 p-4 rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-900">Risk Reduction</span>
+              <span className={`text-lg font-bold ${reductionPct > 0 ? "text-green-700" : "text-gray-400"}`}>
+                {reductionPct > 0 ? `-${reductionPct}%` : "0%"}
               </span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span>Brutto: <strong className="text-red-600">{bruttoScore}</strong></span>
+              <span>-&gt;</span>
+              <span>Netto: <strong className="text-green-600">{nettoScore}</strong></span>
+              <span>|</span>
+              <span>{mappedControlsSet.size} Controls mapped</span>
             </div>
           </div>
 
@@ -1418,43 +1535,70 @@ export default function AssetDetailPage() {
                     {riskThreats.map((rt) => {
                       const bruttoLevel = getRiskLevel(rt.bruttoScore);
                       const nettoLevel = getRiskLevel(rt.nettoScore);
-                      
+                      let controlCount = 0;
+                      try {
+                        const mc = rt.controlsMapped ? JSON.parse(rt.controlsMapped) : [];
+                        controlCount = Array.isArray(mc) ? mc.length : 0;
+                      } catch { /* */ }
+                      const reductionPct = rt.bruttoScore > 1 && rt.nettoScore < rt.bruttoScore
+                        ? Math.round(((rt.bruttoScore - rt.nettoScore) / rt.bruttoScore) * 100)
+                        : 0;
+                      const statusTag = rt.bruttoScore <= 1
+                        ? { label: "Offen", color: "bg-gray-100 text-gray-500" }
+                        : controlCount > 0 && rt.nettoScore < rt.bruttoScore
+                        ? { label: "Mitigiert", color: "bg-emerald-100 text-emerald-700" }
+                        : controlCount > 0
+                        ? { label: "Maßnahmen", color: "bg-blue-100 text-blue-700" }
+                        : { label: "Unbehandelt", color: "bg-orange-100 text-orange-700" };
+
                       return (
                         <div
                           key={rt.id}
-                          className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 cursor-pointer"
+                          className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 hover:shadow-sm cursor-pointer transition-all"
                           onClick={() => {
                             setEditingRisk(rt);
                             setIsRiskCalculationModalOpen(true);
                           }}
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">
                                   {rt.threatScenario.code}
                                 </span>
                                 <span className="font-medium text-gray-900">{rt.threatScenario.name}</span>
                               </div>
-                              <p className="text-sm text-gray-500">{rt.threatScenario.description}</p>
+                              <p className="text-sm text-gray-500 truncate">{rt.threatScenario.description}</p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              {/* Status Tag */}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusTag.color}`}>
+                                {statusTag.label}
+                              </span>
+                              {/* Controls badge */}
+                              {controlCount > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                  <Shield className="w-3 h-3" />
+                                  {controlCount}
+                                </span>
+                              )}
                               {/* Brutto */}
                               <div className="text-right">
                                 <p className="text-xs text-gray-400">Brutto</p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${bruttoLevel.color}`}>
                                     {bruttoLevel.label}
                                   </span>
                                   <span className="font-bold text-red-600">{rt.bruttoScore}</span>
                                 </div>
                               </div>
-                              {/* Arrow */}
-                              <ChevronLeft className="w-4 h-4 text-gray-300 rotate-180" />
+                              <ChevronRight className="w-4 h-4 text-gray-300" />
                               {/* Netto */}
                               <div className="text-right">
-                                <p className="text-xs text-gray-400">Netto</p>
-                                <div className="flex items-center gap-2">
+                                <p className="text-xs text-gray-400">
+                                  Netto{reductionPct > 0 && <span className="text-emerald-600 ml-1">-{reductionPct}%</span>}
+                                </p>
+                                <div className="flex items-center gap-1.5">
                                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${nettoLevel.color}`}>
                                     {nettoLevel.label}
                                   </span>

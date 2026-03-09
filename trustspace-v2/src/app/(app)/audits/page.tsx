@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, ChevronRight, MoreVertical } from "lucide-react";
+import { Plus, Search, ChevronRight, MoreVertical, RefreshCw, X } from "lucide-react";
+
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 
@@ -31,10 +32,17 @@ interface Audit {
   status: "open" | "close";
   description?: string;
   documents?: string;
+  recurring?: string;
   owners: AuditOwner[];
 }
 
-const years = [2025, 2026, 2027, 2028];
+const RECURRING_LABELS: Record<string, string> = {
+  quarterly: "Quartalsweise",
+  "semi-annual": "Halbjährlich",
+  annual: "Jährlich",
+};
+
+const currentYear = new Date().getFullYear();
 
 export default function AuditsPage() {
   const router = useRouter();
@@ -42,6 +50,7 @@ export default function AuditsPage() {
   const [audits, setAudits] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmDeleteYear, setConfirmDeleteYear] = useState<number | null>(null);
 
   // Load audits from API
   useEffect(() => {
@@ -61,15 +70,26 @@ export default function AuditsPage() {
     loadAudits();
   }, []);
 
+  const deleteYear = async (year: number) => {
+    await fetch(`/api/audits?year=${year}`, { method: "DELETE" });
+    setAudits(prev => prev.filter(a => new Date(a.plannedDate).getFullYear() !== year));
+    setConfirmDeleteYear(null);
+  };
+
+  // Derive visible years: unique years from audits + current year
+  const auditYears = Array.from(new Set(audits.map(a => new Date(a.plannedDate).getFullYear())));
+  const allYears = Array.from(new Set([...auditYears, currentYear])).sort((a, b) => a - b);
+  const years = allYears;
+
   // Group audits by year
-  const auditsByYear = years.reduce((acc, year) => {
+  const auditsByYear = allYears.reduce((acc, year) => {
     acc[year] = audits.filter(a => new Date(a.plannedDate).getFullYear() === year);
     return acc;
   }, {} as Record<number, Audit[]>);
 
   // Filter audits for selected year
-  const currentAudits = selectedYear 
-    ? auditsByYear[selectedYear].filter(a => 
+  const currentAudits = selectedYear
+    ? (auditsByYear[selectedYear] || []).filter(a =>
         a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.type.toLowerCase().includes(searchQuery.toLowerCase())
       )
@@ -113,17 +133,24 @@ export default function AuditsPage() {
         </div>
 
         {/* Year Cards */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {years.map((year) => (
-            <Card 
-              key={year} 
-              className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+            <Card
+              key={year}
+              className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group relative"
               onClick={() => setSelectedYear(year)}
             >
-              {/* Image Header */}
-              <div 
-                className="h-32 bg-gradient-to-br from-blue-400 to-blue-600 relative"
+              {/* Delete button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmDeleteYear(year); }}
+                className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-black/20 hover:bg-red-500 flex items-center justify-center transition-colors"
+                title="Jahr löschen"
               >
+                <X className="w-3 h-3 text-white" />
+              </button>
+
+              {/* Image Header */}
+              <div className="h-32 bg-gradient-to-br from-blue-400 to-blue-600 relative">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-4xl font-bold text-white">{year}</span>
                 </div>
@@ -134,15 +161,40 @@ export default function AuditsPage() {
                 <p className="text-sm text-gray-500 mt-1">
                   {auditsByYear[year]?.length || 0} Audits
                 </p>
-                {auditsByYear[year]?.filter(a => a.status === "open").length > 0 && (
-                  <Badge className="mt-2 bg-orange-100 text-orange-700">
-                    {auditsByYear[year].filter(a => a.status === "open").length} Open
-                  </Badge>
-                )}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {auditsByYear[year]?.filter(a => a.status === "open").length > 0 && (
+                    <Badge className="bg-orange-100 text-orange-700 border-0">
+                      {auditsByYear[year].filter(a => a.status === "open").length} Offen
+                    </Badge>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        {/* Confirm Delete Year Dialog */}
+        {confirmDeleteYear !== null && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Jahr {confirmDeleteYear} löschen</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Alle {auditsByYear[confirmDeleteYear]?.length || 0} Audits aus {confirmDeleteYear} werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setConfirmDeleteYear(null)}>
+                  Abbrechen
+                </Button>
+                <Button
+                  onClick={() => deleteYear(confirmDeleteYear)}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
+                  Alle löschen
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -196,6 +248,7 @@ export default function AuditsPage() {
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Title</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Planned Date</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Type</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Wiederholung</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Status</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Owners</th>
                 <th className="w-10"></th>
@@ -216,6 +269,16 @@ export default function AuditsPage() {
                   </td>
                   <td className="py-4 px-4">
                     <Badge variant="outline">{audit.type}</Badge>
+                  </td>
+                  <td className="py-4 px-4">
+                    {audit.recurring && audit.recurring !== "none" ? (
+                      <span className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-full w-fit">
+                        <RefreshCw className="w-3 h-3" />
+                        {RECURRING_LABELS[audit.recurring] || audit.recurring}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">Einmalig</span>
+                    )}
                   </td>
                   <td className="py-4 px-4">
                     <Badge className={getStatusColor(audit.status)} variant="outline">
@@ -249,7 +312,7 @@ export default function AuditsPage() {
               ))}
               {currentAudits.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-500">
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
                     No audits found for {selectedYear}
                   </td>
                 </tr>

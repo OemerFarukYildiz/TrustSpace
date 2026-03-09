@@ -28,7 +28,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isToday } from "date-fns";
+import { useRouter } from "next/navigation";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isToday, startOfYear, endOfYear } from "date-fns";
 import { de } from "date-fns/locale";
 
 // Chart Data
@@ -77,6 +78,7 @@ interface Audit {
 }
 
 export function DashboardView() {
+  const router = useRouter();
   // Audits State - loaded from API
   const [audits, setAudits] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,13 +125,23 @@ export function DashboardView() {
     return audits.filter(audit => isSameDay(new Date(audit.plannedDate), day));
   };
 
-  // Nächstes Audit für Countdown
+  // Audits im aktuellen Jahr (für Sidebar)
+  const yearStart = startOfYear(new Date());
+  const yearEnd = endOfYear(new Date());
   const upcomingAudits = audits
-    .filter(a => new Date(a.plannedDate) >= new Date() && a.status === "open")
+    .filter(a => {
+      const d = new Date(a.plannedDate);
+      return d >= yearStart && d <= yearEnd;
+    })
     .sort((a, b) => new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime());
 
-  const daysToNextAudit = upcomingAudits.length > 0
-    ? Math.ceil((new Date(upcomingAudits[0].plannedDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+  // Nächstes zukünftiges Audit für Header-Countdown
+  const nextFutureAudit = audits
+    .filter(a => new Date(a.plannedDate) >= new Date() && a.status === "open")
+    .sort((a, b) => new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime())[0] || null;
+
+  const daysToNextAudit = nextFutureAudit
+    ? Math.ceil((new Date(nextFutureAudit.plannedDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
   // Kompakte Kalender-Ansicht (nur aktueller Monat, klein)
@@ -145,9 +157,9 @@ export function DashboardView() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {upcomingAudits.length > 0 ? (
+            {nextFutureAudit ? (
               <>
-                Next audit: <span className="font-medium text-[#0066FF]">{upcomingAudits[0].title}</span> in {Math.ceil((new Date(upcomingAudits[0].plannedDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
+                Next audit: <span className="font-medium text-[#0066FF]">{nextFutureAudit.title}</span> in {daysToNextAudit} days
               </>
             ) : (
               "Welcome to your ISMS Dashboard"
@@ -347,14 +359,14 @@ export function DashboardView() {
               </div>
               
               {/* Upcoming Audit Preview */}
-              {upcomingAudits.length > 0 && (
+              {nextFutureAudit && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    <p className="text-xs text-gray-500">Next audit</p>
+                    <p className="text-xs text-gray-500">Nächster Audit</p>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 truncate ml-4">{upcomingAudits[0].title}</p>
-                  <p className="text-xs text-gray-400 ml-4">{format(new Date(upcomingAudits[0].plannedDate), "dd. MMMM yyyy", { locale: de })}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate ml-4">{nextFutureAudit.title}</p>
+                  <p className="text-xs text-gray-400 ml-4">{format(new Date(nextFutureAudit.plannedDate), "dd. MMMM yyyy", { locale: de })}</p>
                 </div>
               )}
             </CardContent>
@@ -460,9 +472,10 @@ export function DashboardView() {
                       </div>
                       <div className="space-y-1">
                         {dayAudits.map((audit) => (
-                          <div
+                          <button
                             key={audit.id}
-                            className={`text-[10px] px-2 py-1 rounded-md truncate font-medium ${
+                            onClick={() => { setCalendarOpen(false); router.push(`/audits/${audit.id}`); }}
+                            className={`w-full text-left text-[10px] px-2 py-1 rounded-md truncate font-medium cursor-pointer hover:opacity-80 transition-opacity ${
                               audit.type === "Internal Audit" ? "bg-blue-100 text-blue-700" :
                               audit.type === "External Audit" ? "bg-purple-100 text-purple-700" :
                               audit.type === "Certification" ? "bg-green-100 text-green-700" :
@@ -470,7 +483,7 @@ export function DashboardView() {
                             }`}
                           >
                             {audit.title}
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -511,28 +524,38 @@ export function DashboardView() {
               <div className="flex-1 overflow-y-auto space-y-3">
                 {upcomingAudits.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No upcoming audits
+                    Keine Audits in {new Date().getFullYear()}
                   </p>
                 ) : (
-                  upcomingAudits.map((audit) => (
-                    <div key={audit.id} className="p-3 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow">
-                      <p className="font-medium text-sm text-gray-900">{audit.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {format(new Date(audit.plannedDate), "dd. MMMM yyyy", { locale: de })}
-                      </p>
-                      <Badge 
-                        className={`mt-2 text-xs ${
-                          audit.type === "Internal Audit" ? "bg-blue-100 text-blue-700 border-blue-200" :
-                          audit.type === "External Audit" ? "bg-purple-100 text-purple-700 border-purple-200" :
-                          audit.type === "Certification" ? "bg-green-100 text-green-700 border-green-200" :
-                          "bg-gray-100 text-gray-700 border-gray-200"
-                        }`} 
-                        variant="outline"
+                  upcomingAudits.map((audit) => {
+                    const isPast = new Date(audit.plannedDate) < new Date();
+                    return (
+                      <button
+                        key={audit.id}
+                        onClick={() => { setCalendarOpen(false); router.push(`/audits/${audit.id}`); }}
+                        className={`w-full text-left p-3 bg-white rounded-lg border hover:shadow-md transition-shadow cursor-pointer ${isPast ? "border-gray-100 opacity-60" : "border-gray-200"}`}
                       >
-                        {audit.type}
-                      </Badge>
-                    </div>
-                  ))
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-medium text-sm text-gray-900">{audit.title}</p>
+                          {isPast && <span className="text-[10px] text-gray-400 shrink-0">vergangen</span>}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {format(new Date(audit.plannedDate), "dd. MMMM yyyy", { locale: de })}
+                        </p>
+                        <Badge
+                          className={`mt-2 text-xs ${
+                            audit.type === "Internal Audit" ? "bg-blue-100 text-blue-700 border-blue-200" :
+                            audit.type === "External Audit" ? "bg-purple-100 text-purple-700 border-purple-200" :
+                            audit.type === "Certification" ? "bg-green-100 text-green-700 border-green-200" :
+                            "bg-gray-100 text-gray-700 border-gray-200"
+                          }`}
+                          variant="outline"
+                        >
+                          {audit.type}
+                        </Badge>
+                      </button>
+                    );
+                  })
                 )}
               </div>
 

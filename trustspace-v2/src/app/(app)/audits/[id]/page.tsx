@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronRight, Save, FileText, Plus, X, Calendar } from "lucide-react";
+import { ChevronRight, Save, FileText, Plus, X, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface Employee {
@@ -30,6 +30,8 @@ interface Audit {
   status: "open" | "close";
   description?: string;
   documents?: string;
+  recurring?: string;
+  seriesId?: string;
   owners: { id: string; employeeId: string; employee: Employee }[];
 }
 
@@ -44,6 +46,8 @@ export default function AuditDetailPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const [audit, setAudit] = useState<Partial<Audit>>({
     title: "",
@@ -51,6 +55,7 @@ export default function AuditDetailPage() {
     type: "Internal Audit",
     status: "open",
     description: "",
+    recurring: "none",
     owners: [],
   });
 
@@ -94,21 +99,32 @@ export default function AuditDetailPage() {
 
   const year = audit.plannedDate ? new Date(audit.plannedDate).getFullYear() : new Date().getFullYear();
 
+  const deleteAudit = async (deleteSeries: boolean) => {
+    try {
+      const url = `/api/audits/${auditId}${deleteSeries ? "?deleteSeries=true" : ""}`;
+      await fetch(url, { method: "DELETE" });
+      router.push("/audits");
+    } catch (error) {
+      console.error("Failed to delete audit:", error);
+    }
+  };
+
   const saveAudit = async () => {
     if (!audit.title) return;
-    
+    setSaveError(null);
     setSaving(true);
     try {
       const ownerIds = audit.owners?.map(o => o.employeeId) || [];
       const payload = {
         title: audit.title,
-        type: audit.type,
-        plannedDate: audit.plannedDate,
-        actualDate: audit.actualDate,
-        description: audit.description,
-        status: audit.status,
+        type: audit.type || "Internal Audit",
+        plannedDate: audit.plannedDate || new Date().toISOString(),
+        actualDate: audit.actualDate || null,
+        description: audit.description || null,
+        status: audit.status || "open",
         ownerIds,
         documents,
+        recurring: audit.recurring || "none",
       };
 
       const url = isNew ? "/api/audits" : `/api/audits/${auditId}`;
@@ -123,10 +139,11 @@ export default function AuditDetailPage() {
       if (res.ok) {
         router.push("/audits");
       } else {
-        console.error("Failed to save audit");
+        const errData = await res.json().catch(() => ({ error: "Unbekannter Fehler" }));
+        setSaveError(errData.error || errData.details || "Speichern fehlgeschlagen");
       }
     } catch (error) {
-      console.error("Failed to save audit:", error);
+      setSaveError((error as Error).message || "Netzwerkfehler");
     } finally {
       setSaving(false);
     }
@@ -307,10 +324,42 @@ export default function AuditDetailPage() {
             </div>
           </div>
 
+          {/* Recurring */}
+          <div>
+            <Label className="text-sm text-gray-500">Wiederholung</Label>
+            <div className="mt-1 flex gap-2">
+              {[
+                { value: "none", label: "Einmalig" },
+                { value: "quarterly", label: "Quartalsweise" },
+                { value: "semi-annual", label: "Halbjährlich" },
+                { value: "annual", label: "Jährlich" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setAudit({ ...audit, recurring: opt.value })}
+                  className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                    (audit.recurring || "none") === opt.value
+                      ? "bg-[#0066FF] text-white border-[#0066FF]"
+                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {(audit.recurring && audit.recurring !== "none") && (
+              <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Wird automatisch für die nächsten 5 Jahre im Kalender angelegt
+              </p>
+            )}
+          </div>
+
           {/* Description */}
           <div>
             <Label htmlFor="description" className="text-sm text-gray-500">Description</Label>
-            <Textarea 
+            <Textarea
               id="description"
               value={audit.description || ""}
               onChange={(e) => setAudit({ ...audit, description: e.target.value })}
@@ -363,16 +412,88 @@ export default function AuditDetailPage() {
           </div>
 
           {/* Save Button */}
-          <div className="flex justify-center pt-4">
-            <Button 
-              onClick={saveAudit}
-              disabled={saving || !audit.title}
-              className="bg-green-500 hover:bg-green-600 text-white px-8"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {saving ? "Saving..." : "Save"}
-            </Button>
+          <div className="flex items-center justify-between pt-4">
+            {!isNew && (
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Löschen
+              </Button>
+            )}
+            <div className="flex flex-col items-end gap-2 ml-auto">
+              {saveError && (
+                <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg border border-red-200">
+                  Fehler: {saveError}
+                </p>
+              )}
+              <Button
+                onClick={saveAudit}
+                disabled={saving || !audit.title}
+                className="bg-green-500 hover:bg-green-600 text-white px-8"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? "Speichern..." : "Speichern"}
+              </Button>
+            </div>
           </div>
+
+          {/* Delete Dialog */}
+          {showDeleteDialog && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Audit löschen</h3>
+                {audit.seriesId ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Dieser Audit ist Teil einer wiederkehrenden Serie. Möchtest du nur diesen Termin oder alle zukünftigen Instanzen löschen?
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        onClick={() => deleteAudit(false)}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        Nur diesen Termin löschen
+                      </Button>
+                      <Button
+                        onClick={() => deleteAudit(true)}
+                        className="w-full bg-red-500 hover:bg-red-600 text-white"
+                      >
+                        Gesamte Serie löschen
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setShowDeleteDialog(false)}
+                        className="w-full text-gray-500"
+                      >
+                        Abbrechen
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Möchtest du diesen Audit wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="ghost" onClick={() => setShowDeleteDialog(false)}>
+                        Abbrechen
+                      </Button>
+                      <Button
+                        onClick={() => deleteAudit(false)}
+                        className="bg-red-500 hover:bg-red-600 text-white"
+                      >
+                        Löschen
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
