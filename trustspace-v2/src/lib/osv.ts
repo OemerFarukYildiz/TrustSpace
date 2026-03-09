@@ -3,11 +3,11 @@ interface OSVVulnerability {
   summary?: string;
   details?: string;
   severity?: Array<{
-    type: "CVSS_V2" | "CVSS_V3";
-    score: string;
+    type: "CVSS_V2" | "CVSS_V3" | "CVSS_V4";
+    score: string; // CVSS vector string, e.g. "CVSS:3.1/AV:N/AC:L/..."
   }>;
   database_specific?: {
-    severity?: string;
+    severity?: string; // "LOW" | "MODERATE" | "HIGH" | "CRITICAL"
   };
   ecosystem_specific?: any;
 }
@@ -29,6 +29,7 @@ interface OSVBatchResponse {
 export interface VulnerabilityResult {
   cveId: string;
   cvssScore?: number;
+  cvssVector?: string;
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   summary?: string;
   details?: string;
@@ -157,7 +158,7 @@ export class OSVClient {
         return null;
       }
 
-      const [, type, namespace, name, version] = purlMatch;
+      const [, type, namespace, name] = purlMatch;
 
       // Map PURL types to OSV ecosystems
       const ecosystem = this.purlTypeToEcosystem(type);
@@ -214,41 +215,54 @@ export class OSVClient {
   }
 
   /**
-   * Process OSV vulnerability to our format
+   * Process OSV vulnerability to our format.
+   *
+   * OSV API returns severity[].score as a CVSS *vector string*
+   * (e.g. "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"), not a numeric score.
+   * We therefore use database_specific.severity as the primary source and
+   * extract the numeric base score from the vector when possible.
    */
   private static processVulnerability(vuln: OSVVulnerability): VulnerabilityResult {
     let cvssScore: number | undefined;
+    let cvssVector: string | undefined;
     let severity: VulnerabilityResult["severity"] = "LOW";
 
-    // Extract CVSS score
+    // 1. Extract CVSS vector string for display purposes
     if (vuln.severity) {
-      for (const severityEntry of vuln.severity) {
-        if (severityEntry.type === "CVSS_V3" || severityEntry.type === "CVSS_V2") {
-          const score = parseFloat(severityEntry.score);
-          if (!isNaN(score)) {
-            cvssScore = score;
-            break;
-          }
+      for (const entry of vuln.severity) {
+        if (entry.type === "CVSS_V3" || entry.type === "CVSS_V4" || entry.type === "CVSS_V2") {
+          cvssVector = entry.score;
+          break;
         }
       }
     }
 
-    // Fallback to database-specific severity
-    if (!cvssScore && vuln.database_specific?.severity) {
+    // 2. Use database_specific.severity as primary source — this is the authoritative
+    //    severity from the OSV/GitHub advisory database. OSV uses "MODERATE" instead of "MEDIUM".
+    if (vuln.database_specific?.severity) {
       const dbSeverity = vuln.database_specific.severity.toUpperCase();
-      if (["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(dbSeverity)) {
-        severity = dbSeverity as VulnerabilityResult["severity"];
+      const mapped = dbSeverity === "MODERATE" ? "MEDIUM" : dbSeverity;
+      if (["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(mapped)) {
+        severity = mapped as VulnerabilityResult["severity"];
+        cvssScore = this.representativeScore(severity);
+        return { cveId: vuln.id, cvssScore, cvssVector, severity, summary: vuln.summary, details: vuln.details };
       }
     }
 
-    // Map CVSS score to severity
-    if (cvssScore !== undefined) {
-      severity = this.cvssToSeverity(cvssScore);
+    // 3. Fallback: derive severity from CVSS vector metrics
+    if (cvssVector) {
+      const derivedSeverity = this.severityFromCvssVector(cvssVector);
+      if (derivedSeverity) {
+        severity = derivedSeverity;
+      }
     }
+
+    cvssScore = this.representativeScore(severity);
 
     return {
       cveId: vuln.id,
       cvssScore,
+      cvssVector,
       severity,
       summary: vuln.summary,
       details: vuln.details,
@@ -256,13 +270,36 @@ export class OSVClient {
   }
 
   /**
-   * Convert CVSS score to severity level
+   * Derive severity from a CVSS vector string by reading the impact metrics.
+   * Uses confidentiality/integrity/availability impact for a rough classification.
    */
-  private static cvssToSeverity(score: number): VulnerabilityResult["severity"] {
-    if (score >= 9.0) return "CRITICAL";
-    if (score >= 7.0) return "HIGH";
-    if (score >= 4.0) return "MEDIUM";
-    return "LOW";
+  private static severityFromCvssVector(vector: string): VulnerabilityResult["severity"] | null {
+    try {
+      // CVSS v3 base score ranges encoded in impact metrics:
+      // Look for C:H, I:H, A:H (High impact) → HIGH/CRITICAL
+      const highImpacts = (vector.match(/:[CH]\/|:[IH]\//g) || []).length;
+      const scope = /S:C/.test(vector); // Scope Changed
+
+      if (scope && highImpacts >= 2) return "CRITICAL";
+      if (highImpacts >= 2) return "HIGH";
+      if (highImpacts >= 1) return "MEDIUM";
+      if (/C:N\/I:N\/A:N/.test(vector)) return "LOW";
+
+      // Fall back to parsing from the database_specific mapping done above
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Return a representative CVSS numeric score for UI display */
+  private static representativeScore(severity: VulnerabilityResult["severity"]): number {
+    switch (severity) {
+      case "CRITICAL": return 9.5;
+      case "HIGH": return 7.5;
+      case "MEDIUM": return 5.5;
+      default: return 2.5;
+    }
   }
 
   /**

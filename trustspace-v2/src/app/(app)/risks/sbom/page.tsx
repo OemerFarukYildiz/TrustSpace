@@ -8,50 +8,18 @@ import { Input } from "@/components/ui/input";
 import {
   Search,
   Package,
-  Upload,
-  Download,
   AlertTriangle,
   Shield,
-  ExternalLink,
   Eye,
   ScanLine,
-  FileText
+  Download,
+  Trash2,
 } from "lucide-react";
 
 interface Asset {
   id: string;
   name: string;
   category: string;
-}
-
-interface SBOMDetail {
-  id: string;
-  format: string;
-  versionLabel: string;
-  componentsCount: number;
-  vulnerabilitySummary: {
-    total: number;
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-  components: Array<{
-    id: string;
-    name: string;
-    version?: string;
-    purl?: string;
-    licenseSpdx?: string;
-    dependencyType: string;
-    vulnerabilities: Array<{
-      id: string;
-      cveId: string;
-      severity: string;
-      cvssScore?: number;
-      vexStatus: string;
-    }>;
-  }>;
-  asset: { id: string; name: string; category: string };
 }
 
 interface SBOMOverview {
@@ -81,7 +49,9 @@ export default function SBOMOverviewPage() {
   const [filterSeverity, setFilterSeverity] = useState<string>("all");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [scanningId, setScanningId] = useState<string | null>(null);
-  const [selectedSbomDetail, setSelectedSbomDetail] = useState<SBOMDetail | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     loadSBOMs();
@@ -208,6 +178,33 @@ export default function SBOMOverviewPage() {
     }
   };
 
+  const deleteSbom = async (sbomId: string) => {
+    setDeletingId(sbomId);
+    try {
+      const res = await fetch(`/api/sbom/${sbomId}`, { method: "DELETE" });
+      if (res.ok) await loadSBOMs();
+    } catch (error) {
+      console.error("Failed to delete SBOM:", error);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const resetAll = async () => {
+    setResetting(true);
+    try {
+      const res = await fetch("/api/sbom", { method: "DELETE" });
+      if (res.ok) {
+        setConfirmReset(false);
+        await loadSBOMs();
+      }
+    } catch (error) {
+      console.error("Failed to reset:", error);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loading) return <div className="p-8">Loading...</div>;
 
   return (
@@ -232,6 +229,16 @@ export default function SBOMOverviewPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          {sboms.length > 0 && (
+            <Button
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => setConfirmReset(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Alle löschen
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => router.push("/risks")}
@@ -241,6 +248,36 @@ export default function SBOMOverviewPage() {
           </Button>
         </div>
       </div>
+
+      {/* Confirm-Dialog: Alle löschen */}
+      {confirmReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmReset(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Alle SBOM-Daten löschen?</h3>
+                <p className="text-sm text-gray-500">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Es werden alle SBOMs, Komponenten und Schwachstellenscans gelöscht. Assets bleiben erhalten.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setConfirmReset(false)}>Abbrechen</Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={resetting}
+                onClick={resetAll}
+              >
+                {resetting ? "Löschen..." : "Alle löschen"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Critical Alert */}
       {stats.criticalVulns > 0 && (
@@ -420,19 +457,11 @@ export default function SBOMOverviewPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          try {
-                            const res = await fetch(`/api/sbom/${sbom.id}`);
-                            if (res.ok) {
-                              const data = await res.json();
-                              setSelectedSbomDetail(data);
-                            }
-                          } catch (error) {
-                            console.error("Failed to load SBOM details:", error);
-                          }
+                          router.push(`/risks/sbom/${sbom.id}`);
                         }}
-                        title="View Details"
+                        title="Details anzeigen"
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
@@ -459,6 +488,21 @@ export default function SBOMOverviewPage() {
                       >
                         <Download className="w-4 h-4" />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={deletingId === sbom.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`SBOM von "${sbom.asset.name}" wirklich löschen?`)) {
+                            deleteSbom(sbom.id);
+                          }
+                        }}
+                        title="SBOM löschen"
+                        className="text-red-500 hover:bg-red-50 hover:border-red-300"
+                      >
+                        <Trash2 className={`w-4 h-4 ${deletingId === sbom.id ? "animate-pulse" : ""}`} />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -468,128 +512,6 @@ export default function SBOMOverviewPage() {
         )}
       </div>
 
-      {/* SBOM Detail Modal */}
-      {selectedSbomDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedSbomDetail(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded uppercase">
-                  {selectedSbomDetail.format}
-                </span>
-                <div>
-                  <p className="font-semibold text-gray-900">{selectedSbomDetail.asset.name}</p>
-                  <p className="text-sm text-gray-500">Version {selectedSbomDetail.versionLabel} · {selectedSbomDetail.components.length} Komponenten</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => router.push(`/risks/${selectedSbomDetail.asset.id}?tab=sbom`)}>
-                  <ExternalLink className="w-4 h-4 mr-1" />
-                  Asset öffnen
-                </Button>
-                <button onClick={() => setSelectedSbomDetail(null)} className="p-1 hover:bg-gray-100 rounded text-gray-500 text-lg">✕</button>
-              </div>
-            </div>
-
-            {/* Vulnerability Summary */}
-            {selectedSbomDetail.vulnerabilitySummary.total > 0 ? (
-              <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-3">
-                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <span className="text-sm font-medium text-red-700">{selectedSbomDetail.vulnerabilitySummary.total} Schwachstellen gefunden</span>
-                <div className="flex gap-2 ml-2">
-                  {selectedSbomDetail.vulnerabilitySummary.critical > 0 && <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700 font-medium">{selectedSbomDetail.vulnerabilitySummary.critical} Critical</span>}
-                  {selectedSbomDetail.vulnerabilitySummary.high > 0 && <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700 font-medium">{selectedSbomDetail.vulnerabilitySummary.high} High</span>}
-                  {selectedSbomDetail.vulnerabilitySummary.medium > 0 && <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700 font-medium">{selectedSbomDetail.vulnerabilitySummary.medium} Medium</span>}
-                  {selectedSbomDetail.vulnerabilitySummary.low > 0 && <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 font-medium">{selectedSbomDetail.vulnerabilitySummary.low} Low</span>}
-                </div>
-              </div>
-            ) : (
-              <div className="px-5 py-2.5 bg-green-50 border-b border-green-100 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-green-500" />
-                <span className="text-sm font-medium text-green-700">Keine Schwachstellen gefunden</span>
-              </div>
-            )}
-
-            {/* Component List */}
-            <div className="overflow-y-auto flex-1">
-              <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase px-5 py-3">Komponente</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-3 w-24">Version</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-3 w-24">Lizenz</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-3">Schwachstellen (klicken für Details)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {selectedSbomDetail.components.map((comp) => (
-                    <tr key={comp.id} className={comp.vulnerabilities.length > 0 ? "bg-red-50/20" : ""}>
-                      <td className="px-5 py-3">
-                        <span className="font-medium text-sm text-gray-900">{comp.name}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="text-xs font-mono text-gray-500">{comp.version || "—"}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="text-xs text-gray-500">{comp.licenseSpdx || "—"}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        {comp.vulnerabilities.length === 0 ? (
-                          <div className="flex items-center gap-1 text-green-600">
-                            <Shield className="w-3.5 h-3.5" />
-                            <span className="text-xs">Sicher</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1.5">
-                            {comp.vulnerabilities.map((vuln) => {
-                              const isGHSA = vuln.cveId.startsWith("GHSA-");
-                              const isCVE = vuln.cveId.startsWith("CVE-");
-                              const url = isGHSA
-                                ? `https://github.com/advisories/${vuln.cveId}`
-                                : isCVE
-                                ? `https://nvd.nist.gov/vuln/detail/${vuln.cveId}`
-                                : `https://osv.dev/vulnerability/${vuln.cveId}`;
-                              const severityColors: Record<string, string> = {
-                                CRITICAL: "bg-red-100 text-red-700 border-red-200",
-                                HIGH: "bg-orange-100 text-orange-700 border-orange-200",
-                                MEDIUM: "bg-yellow-100 text-yellow-700 border-yellow-200",
-                                LOW: "bg-blue-100 text-blue-700 border-blue-200",
-                              };
-                              const colorClass = severityColors[vuln.severity] || severityColors.LOW;
-                              return (
-                                <a
-                                  key={vuln.id}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs font-mono hover:opacity-80 transition-opacity ${colorClass}`}
-                                  title="Klicken für Details auf GitHub Advisory / NVD"
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                    vuln.severity === "CRITICAL" ? "bg-red-500" :
-                                    vuln.severity === "HIGH" ? "bg-orange-500" :
-                                    vuln.severity === "MEDIUM" ? "bg-yellow-500" : "bg-blue-500"
-                                  }`} />
-                                  <span className="font-semibold">{vuln.severity}</span>
-                                  <span className="text-opacity-80">·</span>
-                                  <span>{vuln.cveId}</span>
-                                  {vuln.cvssScore && <span className="ml-1 opacity-70">CVSS {vuln.cvssScore}</span>}
-                                  <ExternalLink className="w-3 h-3 ml-0.5 opacity-50" />
-                                </a>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

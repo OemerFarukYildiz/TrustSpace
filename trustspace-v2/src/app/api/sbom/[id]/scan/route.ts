@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OSVClient } from "@/lib/osv";
+import { scanAndSyncFindings } from "@/lib/cve-findings-sync";
 
 // POST /api/sbom/[id]/scan - Manual CVE scan for specific SBOM
 export async function POST(
@@ -45,6 +46,21 @@ export async function POST(
 
     const purls = componentsWithPurls.map(c => c.purl!);
 
+    // Build unique scan folder name (asset + SBOM version + timestamp)
+    const assetName  = sbomDocument.asset?.name ?? "SBOM";
+    const version    = sbomDocument.versionLabel ? ` ${sbomDocument.versionLabel}` : "";
+    const now        = new Date();
+    const scanDate   = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const scanTime   = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    const scanFolder = `${assetName}${version} – Scan ${scanDate} ${scanTime}`;
+
+    // Register in FindingFolder table so it shows in folder management UI
+    await prisma.findingFolder.upsert({
+      where: { organizationId_type_name: { organizationId: "default-org", type: "vulnerability", name: scanFolder } },
+      create: { organizationId: "default-org", type: "vulnerability", name: scanFolder },
+      update: {},
+    });
+
     console.log(`Starting manual scan of ${purls.length} PURLs for SBOM ${id}`);
     console.log(`PURLs to scan:`, purls);
 
@@ -77,34 +93,80 @@ export async function POST(
           },
         });
 
+        // Fetch authoritative details from OSV (incl. GitHub CVSS score for GHSA IDs)
+        let resolvedSeverity = vuln.severity;
+        let resolvedScore = vuln.cvssScore;
+        let remediation = vuln.details || vuln.summary || "";
+        try {
+          const osvRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/osv/${vuln.cveId}`);
+          if (osvRes.ok) {
+            const osvDetail = await osvRes.json();
+            resolvedSeverity = osvDetail.severity || resolvedSeverity;
+            if (osvDetail.cvssScore != null) resolvedScore = osvDetail.cvssScore;
+            if (osvDetail.details) remediation = osvDetail.details;
+            else if (osvDetail.summary) remediation = osvDetail.summary;
+          }
+        } catch {
+          // fall back to OSV client data
+        }
+
         if (existingVuln) {
-          // Update existing vulnerability
           await prisma.vexVulnerability.update({
-            where: {
-              id: existingVuln.id,
-            },
+            where: { id: existingVuln.id },
             data: {
-              cvssScore: vuln.cvssScore,
-              severity: vuln.severity,
-              remediation: vuln.details || vuln.summary || existingVuln.remediation,
+              cvssScore: resolvedScore,
+              severity: resolvedSeverity,
+              remediation: remediation || existingVuln.remediation,
               lastCheckedAt: new Date(),
             },
           });
           scanResults.updatedVulnerabilities++;
+
+          // Ensure a Finding exists for this vuln
+          const hasFinding = await prisma.finding.findFirst({
+            where: { vulnerabilityId: existingVuln.id },
+          });
+          if (!hasFinding) {
+            await prisma.finding.create({
+              data: {
+                organizationId: "default-org",
+                title: vuln.cveId,
+                description: remediation || undefined,
+                type: "vulnerability",
+                priority: severityToPriority(resolvedSeverity),
+                status: "open",
+                vulnerabilityId: existingVuln.id,
+                folder: scanFolder,
+              },
+            });
+          }
         } else {
-          // Create new vulnerability
-          await prisma.vexVulnerability.create({
+          const newVuln = await prisma.vexVulnerability.create({
             data: {
               componentId: component.id,
               cveId: vuln.cveId,
-              cvssScore: vuln.cvssScore,
-              severity: vuln.severity,
+              cvssScore: resolvedScore,
+              severity: resolvedSeverity,
               vexStatus: "under_investigation",
-              remediation: vuln.details || vuln.summary,
+              remediation,
               lastCheckedAt: new Date(),
             },
           });
           scanResults.newVulnerabilities++;
+
+          // Auto-create a Finding (Maßnahme) for each new CVE
+          await prisma.finding.create({
+            data: {
+              organizationId: "default-org",
+              title: vuln.cveId,
+              description: remediation || undefined,
+              type: "vulnerability",
+              priority: severityToPriority(resolvedSeverity),
+              status: "open",
+              vulnerabilityId: newVuln.id,
+              folder: scanFolder,
+            },
+          });
         }
       }
     }
@@ -134,6 +196,15 @@ export async function POST(
       { error: "CVE scan failed" },
       { status: 500 }
     );
+  }
+}
+
+function severityToPriority(severity: string): string {
+  switch (severity?.toUpperCase()) {
+    case "CRITICAL": return "critical";
+    case "HIGH":     return "high";
+    case "MEDIUM":   return "medium";
+    default:         return "low";
   }
 }
 

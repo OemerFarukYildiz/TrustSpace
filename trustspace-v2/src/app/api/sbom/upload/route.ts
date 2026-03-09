@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { SBOMParser } from "@/lib/sbom-parser";
-import { OSVClient } from "@/lib/osv";
+import { scanAndSyncFindings } from "@/lib/cve-findings-sync";
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
           data: {
             sbomDocumentId: sbomDocument.id,
             purl: comp.purl,
+            cpe: comp.cpe,
             name: comp.name,
             version: comp.version,
             supplier: comp.supplier,
@@ -105,12 +106,11 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // Trigger CVE scan after successful upload
+    // Trigger CVE scan + auto-create Findings after successful upload
     try {
-      await triggerCVEScan(result.sbomDocument.id);
+      await scanAndSyncFindings(result.sbomDocument.id);
     } catch (error) {
       console.error("Failed to trigger immediate CVE scan:", error);
-      // Don't fail the upload if scan fails
     }
 
     return NextResponse.json({
@@ -130,83 +130,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerCVEScan(sbomDocumentId: string) {
-  try {
-    // Get all components with PURLs
-    const components = await prisma.sbomComponent.findMany({
-      where: {
-        sbomDocumentId,
-        purl: {
-          not: null,
-        },
-      },
-    });
-
-    if (components.length === 0) {
-      console.log("No components with PURLs found for scanning");
-      return;
-    }
-
-    const purls = components
-      .map(c => c.purl)
-      .filter((purl): purl is string => purl !== null && OSVClient.validatePurl(purl));
-
-    if (purls.length === 0) {
-      console.log("No valid PURLs found for scanning");
-      return;
-    }
-
-    console.log(`Scanning ${purls.length} PURLs for vulnerabilities...`);
-    console.log(`PURLs to scan:`, purls);
-
-    // Scan for vulnerabilities
-    const vulnerabilityResults = await OSVClient.batchScanPurls(purls);
-
-    console.log(`Upload scan completed. Results:`, vulnerabilityResults);
-
-    // Store vulnerability results
-    const vulnerabilityPromises: Promise<any>[] = [];
-
-    for (const [purl, vulnerabilities] of vulnerabilityResults) {
-      const component = components.find(c => c.purl === purl);
-      if (!component) continue;
-
-      for (const vuln of vulnerabilities) {
-        vulnerabilityPromises.push(
-          prisma.vexVulnerability.upsert({
-            where: {
-              componentId_cveId: {
-                componentId: component.id,
-                cveId: vuln.cveId,
-              },
-            },
-            update: {
-              cvssScore: vuln.cvssScore,
-              severity: vuln.severity,
-              vexStatus: "under_investigation",
-              remediation: vuln.details || vuln.summary,
-              lastCheckedAt: new Date(),
-            },
-            create: {
-              componentId: component.id,
-              cveId: vuln.cveId,
-              cvssScore: vuln.cvssScore,
-              severity: vuln.severity,
-              vexStatus: "under_investigation",
-              remediation: vuln.details || vuln.summary,
-              lastCheckedAt: new Date(),
-            },
-          })
-        );
-      }
-    }
-
-    await Promise.all(vulnerabilityPromises);
-
-    console.log(`CVE scan completed. Found ${vulnerabilityPromises.length} vulnerabilities.`);
-
-  } catch (error) {
-    console.error("CVE scan failed:", error);
-    throw error;
-  }
-}

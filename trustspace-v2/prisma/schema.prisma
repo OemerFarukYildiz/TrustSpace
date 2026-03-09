@@ -308,20 +308,65 @@ model Finding {
   assigneeId      String?
   
   // Verknüpfungen
-  riskId          String?
-  controlId       String?
-  auditId         String?
-  
+  riskId              String?
+  controlId           String?
+  auditId             String?
+  vulnerabilityId     String?  // Link to VexVulnerability (CVE-Maßnahme)
+  folder              String?  // Ordner/Version-Gruppe
+
+  // Typ-spezifische Felder
+  controlRef          String?  // für audit_finding: ISO-Kontrolle
+  deviation           String?  // für audit_finding: Abweichung
+  rootCause           String?  // für audit_finding: Ursache
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignee        Employee?    @relation(fields: [assigneeId], references: [id])
-  risk            Risk?        @relation(fields: [riskId], references: [id])
-  control         Control?     @relation(fields: [controlId], references: [id])
-  audit           Audit?       @relation(fields: [auditId], references: [id])
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee        Employee?         @relation(fields: [assigneeId], references: [id])
+  risk            Risk?             @relation(fields: [riskId], references: [id])
+  control         Control?          @relation(fields: [controlId], references: [id])
+  audit           Audit?            @relation(fields: [auditId], references: [id])
+  vulnerability   VexVulnerability? @relation(fields: [vulnerabilityId], references: [id])
+  comments        FindingComment[]
+  attachments     FindingAttachment[]
 
   @@map("findings")
+}
+
+model FindingComment {
+  id         String   @id @default(cuid())
+  findingId  String
+  authorName String   @default("System")
+  content    String
+  createdAt  DateTime @default(now())
+
+  finding    Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  @@map("finding_comments")
+}
+
+model FindingAttachment {
+  id        String   @id @default(cuid())
+  findingId String
+  fileName  String
+  fileUrl   String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  finding   Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  @@map("finding_attachments")
+}
+
+model FindingFolder {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  type           String   // vulnerability, audit_finding, improvement, incident, task
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, type, name])
+  @@map("finding_folders")
 }
 
 model Audit {
@@ -403,6 +448,7 @@ model SbomComponent {
   id              String   @id @default(cuid())
   sbomDocumentId  String
   purl            String?  // Package URL
+  cpe             String?  // Common Platform Enumeration
   name            String
   version         String?
   supplier        String?
@@ -433,6 +479,7 @@ model VexVulnerability {
   updatedAt       DateTime @updatedAt
 
   component       SbomComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  findings        Finding[]
 
   @@unique([componentId, cveId])
   @@map("vex_vulnerabilities")

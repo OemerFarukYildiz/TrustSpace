@@ -80,6 +80,20 @@ function generateComponents(softwareName: string) {
   return components;
 }
 
+// DELETE /api/sbom - Alle SBOM-Daten löschen (Reset für Demo)
+export async function DELETE() {
+  try {
+    // Cascade: VexVulnerabilities → SbomComponents → SbomDocuments
+    await prisma.vexVulnerability.deleteMany({});
+    await prisma.sbomComponent.deleteMany({});
+    await prisma.sbomDocument.deleteMany({});
+    return NextResponse.json({ success: true, message: "Alle SBOM-Daten gelöscht" });
+  } catch (error: any) {
+    console.error("Failed to reset SBOM data:", error);
+    return NextResponse.json({ error: "Reset fehlgeschlagen", details: error.message }, { status: 500 });
+  }
+}
+
 // POST /api/sbom - Neue SBOM Einträge erstellen
 export async function POST(request: Request) {
   try {
