@@ -1,0 +1,27 @@
+name: SBOM Upload to TrustSpace
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Generate SBOM
+        run: npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6 --ignore-npm-errors
+
+      - name: Upload SBOM to TrustSpace
+        run: |
+          curl -X POST https://unequivocating-jamarion-unvigilantly.ngrok-free.dev/api/sbom/upload \
+            -F "file=@sbom.json" \
+            -F "assetId=cmme1ri6p0003vwxs1rykf8af" \
+            -F "versionLabel=${{ github.sha }}"
