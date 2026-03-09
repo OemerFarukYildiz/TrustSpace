@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
+const ORG_ID = "default";
 
 // Risikoszenarien-Katalog (BSI / ISO 27001 basiert)
 const RISK_SCENARIOS = [
