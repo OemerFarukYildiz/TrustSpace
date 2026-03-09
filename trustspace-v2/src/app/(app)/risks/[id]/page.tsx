@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink, Zap } from "lucide-react";
 import Link from "next/link";
 
 interface Asset {
@@ -1082,6 +1082,9 @@ export default function AssetDetailPage() {
   const [sboms, setSboms] = useState<SBOM[]>([]);
   const [selectedSbom, setSelectedSbom] = useState<SBOMDetail | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [connectTab, setConnectTab] = useState<"github" | "gitlab" | "curl">("github");
+  const [copied, setCopied] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
   useEffect(() => {
@@ -1139,6 +1142,12 @@ export default function AssetDetailPage() {
     } catch (error) {
       console.error("Failed to load SBOMs:", error);
     }
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const getCiaBadge = () => {
@@ -1492,13 +1501,22 @@ export default function AssetDetailPage() {
                       <p className="text-sm text-gray-500">
                         {sboms.length} SBOM(s) uploaded
                       </p>
-                      <Button
-                        className="bg-[#0066FF] hover:bg-blue-700"
-                        onClick={() => setIsUploadModalOpen(true)}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload SBOM
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsConnectModalOpen(true)}
+                        >
+                          <Zap className="w-4 h-4 mr-2" />
+                          Connect
+                        </Button>
+                        <Button
+                          className="bg-[#0066FF] hover:bg-blue-700"
+                          onClick={() => setIsUploadModalOpen(true)}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Upload SBOM
+                        </Button>
+                      </div>
                     </div>
 
                 {sboms.length === 0 ? (
@@ -1506,13 +1524,22 @@ export default function AssetDetailPage() {
                     <Package className="w-12 h-12 mb-4 text-gray-300" />
                     <p className="text-lg">No SBOM uploaded</p>
                     <p className="text-sm mt-1">Upload a CycloneDX or SPDX SBOM for vulnerability scanning</p>
-                    <Button
-                      className="mt-4 bg-[#0066FF]"
-                      onClick={() => setIsUploadModalOpen(true)}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload SBOM
-                    </Button>
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsConnectModalOpen(true)}
+                      >
+                        <Zap className="w-4 h-4 mr-2" />
+                        Connect
+                      </Button>
+                      <Button
+                        className="bg-[#0066FF]"
+                        onClick={() => setIsUploadModalOpen(true)}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload SBOM
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1746,6 +1773,151 @@ export default function AssetDetailPage() {
         asset={asset}
         onCalculated={loadRiskThreats}
       />
+
+      {/* SBOM Connect / CI Integration Modal */}
+      {isConnectModalOpen && (() => {
+        const assetIdVal = id as string;
+        const apiUrl = typeof window !== "undefined"
+          ? `${window.location.origin}/api/sbom/upload`
+          : "https://your-trustspace.domain/api/sbom/upload";
+
+        const githubSnippet = `name: SBOM Upload to TrustSpace
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Generate SBOM
+        run: npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6
+
+      - name: Upload SBOM to TrustSpace
+        run: |
+          curl -X POST ${apiUrl} \\
+            -F "file=@sbom.json" \\
+            -F "assetId=${assetIdVal}" \\
+            -F "versionLabel=\${{ github.sha }}"`;
+
+        const gitlabSnippet = `sbom-upload:
+  stage: deploy
+  image: node:20
+  script:
+    - npm ci
+    - npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6
+    - |
+      curl -X POST ${apiUrl} \\
+        -F "file=@sbom.json" \\
+        -F "assetId=${assetIdVal}" \\
+        -F "versionLabel=$CI_COMMIT_SHA"
+  only:
+    - main`;
+
+        const curlSnippet = `# 1. SBOM generieren (lokal oder in CI)
+npx @cyclonedx/cyclonedx-npm \\
+  --output-format JSON \\
+  --output-file sbom.json \\
+  --spec-version 1.6
+
+# 2. An TrustSpace senden
+curl -X POST ${apiUrl} \\
+  -F "file=@sbom.json" \\
+  -F "assetId=${assetIdVal}" \\
+  -F "versionLabel=1.0.0"`;
+
+        const tabs = [
+          { key: "github" as const, label: "GitHub Actions", snippet: githubSnippet },
+          { key: "gitlab" as const, label: "GitLab CI", snippet: gitlabSnippet },
+          { key: "curl" as const, label: "curl / manuell", snippet: curlSnippet },
+        ];
+        const activeSnippet = tabs.find(t => t.key === connectTab)?.snippet ?? "";
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold">CI/CD Integration</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Integrieren Sie die SBOM-Generierung in Ihre Pipeline
+                  </p>
+                </div>
+                <button onClick={() => setIsConnectModalOpen(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Asset ID */}
+              <div className="bg-gray-50 border rounded-lg p-3 mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Asset ID (für die API)</p>
+                  <code className="text-sm font-mono text-gray-800">{assetIdVal}</code>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(assetIdVal, "assetId")}
+                  className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1"
+                >
+                  {copied === "assetId" ? "Kopiert ✓" : "Kopieren"}
+                </button>
+              </div>
+
+              {/* How it works */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-sm text-blue-800">
+                <strong>So funktioniert es:</strong> Ihr CI/CD-System generiert die SBOM mit{" "}
+                <code className="bg-blue-100 px-1 rounded text-xs">@cyclonedx/cyclonedx-npm</code> und sendet
+                sie per <code className="bg-blue-100 px-1 rounded text-xs">curl</code> an TrustSpace.
+                Keine Zugangsdaten zu Ihrem Repository nötig.
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b mb-3">
+                {tabs.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setConnectTab(t.key)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      connectTab === t.key
+                        ? "border-blue-500 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Code snippet */}
+              <div className="relative">
+                <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed max-h-64">
+                  {activeSnippet}
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(activeSnippet, "snippet")}
+                  className="absolute top-2 right-2 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded px-2 py-1"
+                >
+                  {copied === "snippet" ? "Kopiert ✓" : "Kopieren"}
+                </button>
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" onClick={() => setIsConnectModalOpen(false)}>
+                  Schließen
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* SBOM Upload Modal */}
       {isUploadModalOpen && (

@@ -10,6 +10,7 @@ const CycloneDXComponent = z.object({
   name: z.string(),
   version: z.string().optional(),
   purl: z.string().optional(),
+  cpe: z.string().optional(),
   licenses: z.array(z.object({
     license: z.object({
       id: z.string().optional(),
@@ -74,6 +75,7 @@ export interface ParsedComponent {
   name: string;
   version?: string;
   purl?: string;
+  cpe?: string;
   supplier?: string;
   licenseSpdx?: string;
   hashSha256?: string;
@@ -193,6 +195,7 @@ export class SBOMParser {
       name: comp.name,
       version: comp.version,
       purl: comp.purl,
+      cpe: comp.cpe,
       supplier: comp.supplier?.name,
       licenseSpdx,
       hashSha256,

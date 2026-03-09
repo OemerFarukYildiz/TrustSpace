@@ -44,3 +44,48 @@ export function getRiskLabel(score: number): string {
 export function calculateRiskScore(probability: number, impact: number): number {
   return probability * impact;
 }
+
+// ============================================================
+// V2 Risk Management Utilities
+// ============================================================
+
+export function getRiskLevelV2(score: number): { label: string; color: string } {
+  if (score >= 70) return { label: "Kritisch", color: "text-red-700 bg-red-100" };
+  if (score >= 50) return { label: "Hoch", color: "text-orange-700 bg-orange-100" };
+  if (score >= 30) return { label: "Mittel", color: "text-yellow-700 bg-yellow-100" };
+  if (score >= 10) return { label: "Niedrig", color: "text-green-700 bg-green-100" };
+  return { label: "Minimal", color: "text-gray-600 bg-gray-100" };
+}
+
+export function formatEUR(amount: number | null | undefined): string {
+  if (amount == null) return "-";
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function calculateALE(sle: number | null | undefined, aro: number | null | undefined): number | null {
+  if (sle == null || aro == null) return null;
+  return Math.round(sle * aro);
+}
+
+export function getRiskScoreV2(probability: number, impact: number): number {
+  return probability * impact;
+}
+
+export function getV2MatrixColor(score: number): string {
+  if (score >= 70) return "bg-red-500";
+  if (score >= 50) return "bg-orange-500";
+  if (score >= 30) return "bg-yellow-400";
+  if (score >= 10) return "bg-green-400";
+  return "bg-green-200";
+}
+
+export function formatLargeNumber(num: number): string {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)} Mio.`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(0)} Tsd.`;
+  return num.toString();
+}

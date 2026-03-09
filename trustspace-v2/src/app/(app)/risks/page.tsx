@@ -52,10 +52,17 @@ interface HardwareItem {
 
 interface SBOMItem {
   id: string;
-  softwareName: string;
-  componentName: string;
-  criticalVulns: number;
-  highVulns: number;
+  format: string;
+  versionLabel: string;
+  componentsCount: number;
+  vulnerabilitySummary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  asset: { id: string; name: string; category: string };
 }
 
 const categories: CategoryStats[] = [
@@ -288,11 +295,8 @@ function HardwareListWidget({ items }: { items: HardwareItem[] }) {
 // SBOM List Widget
 function SBOMListWidget({ items }: { items: SBOMItem[] }) {
   const router = useRouter();
-  
-  // Sort by vulnerability count
-  const sortedItems = [...items].sort((a, b) => 
-    (b.criticalVulns + b.highVulns) - (a.criticalVulns + a.highVulns)
-  );
+
+  const totalComponents = items.reduce((s, i) => s + i.componentsCount, 0);
 
   return (
     <div className="bg-white rounded-lg border border-gray-100 p-5">
@@ -303,12 +307,14 @@ function SBOMListWidget({ items }: { items: SBOMItem[] }) {
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">SBOM</h3>
-            <p className="text-xs text-gray-500">{items.length} components</p>
+            <p className="text-xs text-gray-500">
+              {items.length === 0 ? "Keine SBOMs" : `${items.length} SBOMs · ${totalComponents.toLocaleString()} Komponenten`}
+            </p>
           </div>
         </div>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           className="text-blue-600"
           onClick={() => router.push("/risks/sbom")}
         >
@@ -316,41 +322,50 @@ function SBOMListWidget({ items }: { items: SBOMItem[] }) {
           <ChevronRight className="w-4 h-4 ml-1" />
         </Button>
       </div>
-      
+
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-4">Noch keine SBOMs hochgeladen</p>
+      ) : (
       <div className="space-y-2">
-        {sortedItems.slice(0, 4).map((item) => (
-          <div 
-            key={item.id} 
+        {items.slice(0, 4).map((item) => {
+          const vs = item.vulnerabilitySummary;
+          return (
+          <div
+            key={item.id}
             className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg cursor-pointer"
-            onClick={() => router.push("/risks/sbom")}
+            onClick={() => router.push(`/risks/sbom/${item.id}`)}
           >
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-700 truncate">{item.componentName}</p>
-              <p className="text-xs text-gray-400">{item.softwareName}</p>
+              <p className="text-sm text-gray-700 truncate font-medium">{item.asset.name}</p>
+              <p className="text-xs text-gray-400 font-mono">{item.versionLabel} · {item.componentsCount} Komp.</p>
             </div>
             <div className="flex items-center gap-1">
-              {item.criticalVulns > 0 && (
-                <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
-                  {item.criticalVulns} C
+              {vs.critical > 0 && (
+                <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700 font-semibold">
+                  {vs.critical} C
                 </span>
               )}
-              {item.highVulns > 0 && (
-                <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
-                  {item.highVulns} H
+              {vs.high > 0 && (
+                <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700 font-semibold">
+                  {vs.high} H
                 </span>
               )}
-              {item.criticalVulns === 0 && item.highVulns === 0 && (
+              {vs.medium > 0 && (
+                <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700 font-semibold">
+                  {vs.medium} M
+                </span>
+              )}
+              {vs.total === 0 && (
                 <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
                   Clean
                 </span>
               )}
             </div>
           </div>
-        ))}
-        {items.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-4">No components found</p>
-        )}
+          );
+        })}
       </div>
+      )}
     </div>
   );
 }
@@ -413,11 +428,16 @@ export default function RisksOverviewPage() {
         setHardwareItems(hw.slice(0, 5)); // Top 5
       }
 
-      // Load SBOM list
-      const sbomRes = await fetch("/api/sbom");
+      // Load SBOM list (real data from overview endpoint)
+      const sbomRes = await fetch("/api/sbom/overview");
       if (sbomRes.ok) {
         const sbom = await sbomRes.json();
-        setSbomItems(sbom.slice(0, 5)); // Top 5
+        // Sort by worst vulnerability first
+        sbom.sort((a: SBOMItem, b: SBOMItem) =>
+          (b.vulnerabilitySummary.critical * 1000 + b.vulnerabilitySummary.high * 100 + b.vulnerabilitySummary.medium) -
+          (a.vulnerabilitySummary.critical * 1000 + a.vulnerabilitySummary.high * 100 + a.vulnerabilitySummary.medium)
+        );
+        setSbomItems(sbom.slice(0, 5));
       }
     } catch (error) {
       console.error("Failed to load data:", error);
