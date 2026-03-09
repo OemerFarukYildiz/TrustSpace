@@ -16,6 +16,8 @@ import {
   ClipboardCheck,
   Calendar,
   ChevronDown,
+  Server,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -155,6 +157,21 @@ export function AppSidebar() {
         >
           <AlertTriangle className={cn("w-5 h-5", isActive("/risks") ? "text-[#0066FF]" : "text-gray-500")} />
           <span>Risks & Assets</span>
+        </Link>
+
+        {/* Risks & Assets v2 */}
+        <Link
+          href="/risks-v2"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors mb-1",
+            isActive("/risks-v2")
+              ? "text-[#0066FF] bg-blue-50"
+              : "text-gray-600 hover:bg-gray-50"
+          )}
+        >
+          <BarChart3 className={cn("w-5 h-5", isActive("/risks-v2") ? "text-[#0066FF]" : "text-gray-500")} />
+          <span>Risks & Assets v2</span>
+          <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-[#0066FF]">NEU</span>
         </Link>
 
         {/* Vendoren */}

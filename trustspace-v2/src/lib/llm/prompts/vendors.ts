@@ -56,3 +56,39 @@ Antworte im JSON-Format:
   "risks": ["Risiko 1", "Risiko 2"]
 }`;
 }
+
+export function generateVendorAutofillPrompt(companyName: string): string {
+  return `Recherchiere oeffentlich verfuegbare Informationen ueber das folgende Unternehmen und gib strukturierte Daten zurueck.
+
+**Unternehmen:** ${companyName}
+
+**Gesuchte Informationen:**
+1. Offizielle Website-URL
+2. Hauptsitz (Adresse, Land)
+3. Branche / Kategorie
+4. Ungefaehre Mitarbeiterzahl (Bereich: 1-10, 11-50, 51-200, 201-1000, 1001-5000, 5000+)
+5. Gruendungsjahr (falls bekannt)
+6. Angebotene Dienstleistungen/Produkte
+7. Zertifizierungen (ISO 27001, SOC 2, etc.)
+8. DSGVO-Konformitaet (ja/nein/unbekannt)
+9. Trust Center oder Security-Seite URL
+10. Domain fuer Logo (z.B. "telekom.de")
+
+Antworte NUR im JSON-Format:
+{
+  "website": "https://...",
+  "address": "...",
+  "country": "Deutschland",
+  "category": "IT-Dienstleistung",
+  "employeeCount": "201-1000",
+  "foundedYear": 2005,
+  "services": "...",
+  "certifications": ["ISO 27001", "SOC 2"],
+  "gdprCompliant": true,
+  "trustCenterUrl": "https://...",
+  "logoDomain": "example.com",
+  "dpoContact": "datenschutz@example.com"
+}
+
+Wenn Informationen nicht verfuegbar sind, verwende null.`;
+}
