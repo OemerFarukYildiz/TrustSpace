@@ -1,12 +1,38 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  AlertTriangle,
+  ChevronRight,
+  Shield,
+  Lock,
+  Eye,
+  Zap,
+  Plus,
+  Search,
+  X,
+  Check,
+  Package,
+  ExternalLink,
+  Upload,
+  Download,
+  Link2,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ChevronRight, Plus, Trash2, Search, X, AlertTriangle, Shield, Calculator, Link2, Upload, Download, Package, ExternalLink, Zap } from "lucide-react";
-import Link from "next/link";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
 
 interface Asset {
   id: string;
@@ -46,11 +72,26 @@ interface RiskThreat {
   nettoImpact: number;
   nettoScore: number;
   controlsMapped: string;
+  schadenStufe: number;
+  wahrscheinlichkeitStufe: number;
+  nettoSchadenStufe: number;
+  nettoWahrscheinlichkeitStufe: number;
+  schadenInEuro?: number | null;
+  v1BruttoScore: number;
+  v1NettoScore: number;
+  schadenklasse?: number | null;
+  wahrscheinlichkeitV2?: number | null;
+  nettoSchadenklasse?: number | null;
+  nettoWahrscheinlichkeitV2?: number | null;
+  v2BruttoScore?: number | null;
+  v2NettoScore?: number | null;
   threatScenario: {
     code: string;
     name: string;
     description: string;
   };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ThreatScenario {
@@ -109,560 +150,36 @@ interface SBOMDetail {
   }>;
 }
 
-// CIA Calculator Modal
-function CIACalculatorModal({
-  isOpen,
-  onClose,
-  asset,
-  onCalculated,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  asset: Asset | null;
-  onCalculated: () => void;
-}) {
-  const [confidentiality, setConfidentiality] = useState(1);
-  const [integrity, setIntegrity] = useState(1);
-  const [availability, setAvailability] = useState(1);
-  const [loading, setLoading] = useState(false);
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
-  useEffect(() => {
-    if (asset) {
-      setConfidentiality(asset.confidentiality || 1);
-      setIntegrity(asset.integrity || 1);
-      setAvailability(asset.availability || 1);
-    }
-  }, [asset, isOpen]);
-
-  if (!isOpen || !asset) return null;
-
-  const ciaAverage = (confidentiality + integrity + availability) / 3;
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/assets/${asset.id}/calculate-cia`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confidentiality,
-          integrity,
-          availability,
-        }),
-      });
-
-      if (res.ok) {
-        onCalculated();
-        onClose();
-      }
-    } catch (error) {
-      console.error("Failed to save CIA:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getProtectionNeed = (value: number) => {
-    if (value <= 1.5) return { label: "Normal", color: "green" };
-    if (value <= 2.3) return { label: "High", color: "yellow" };
-    return { label: "Very High", color: "red" };
-  };
-
-  const protectionNeed = getProtectionNeed(ciaAverage);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Calculate Protection Need (CIA)</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Rate each CIA factor from 1 (Low) to 3 (High):
-          </p>
-
-          {/* Confidentiality */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Confidentiality (Vertraulichkeit)
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setConfidentiality(value)}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    confidentiality === value
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {value} - {value === 1 ? "Low" : value === 2 ? "Medium" : "High"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Integrity */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Integrity (Integrität)
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setIntegrity(value)}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    integrity === value
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {value} - {value === 1 ? "Low" : value === 2 ? "Medium" : "High"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Availability */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Availability (Verfügbarkeit)
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setAvailability(value)}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    availability === value
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {value} - {value === 1 ? "Low" : value === 2 ? "Medium" : "High"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Result */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">CIA Average</p>
-                <p className="text-2xl font-bold">{ciaAverage.toFixed(2)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">Protection Need</p>
-                <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                    protectionNeed.color === "green"
-                      ? "bg-green-100 text-green-800"
-                      : protectionNeed.color === "yellow"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  {protectionNeed.label}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 bg-[#0066FF] hover:bg-blue-700"
-              disabled={loading}
-              onClick={handleSave}
-            >
-              {loading ? "Saving..." : "Save Calculation"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function getCIAColor(value: number): string {
+  if (value >= 3) return "text-red-600";
+  if (value >= 2) return "text-orange-600";
+  if (value >= 1) return "text-green-600";
+  return "text-gray-400";
 }
 
-// Control Mapping Section for V1
-function ControlMappingSection({
-  selectedControls,
-  onToggle,
-}: {
-  selectedControls: Set<string>;
-  onToggle: (code: string) => void;
-}) {
-  const [controls, setControls] = useState<Array<{ id: string; code: string; title: string; status: string; implementationPct: number | null }>>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/controls")
-      .then((r) => r.json())
-      .then((data) => setControls(data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = controls.filter((c) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q);
-  });
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-medium text-gray-900 flex items-center gap-2">
-          <Shield className="w-4 h-4 text-blue-600" />
-          Mapped Controls ({selectedControls.size})
-        </h3>
-      </div>
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search controls..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      <div className="max-h-40 overflow-y-auto border rounded-lg divide-y divide-gray-100">
-        {loading ? (
-          <p className="text-center py-4 text-sm text-gray-400">Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-center py-4 text-sm text-gray-400">No controls found</p>
-        ) : (
-          filtered.map((ctrl) => {
-            const isSelected = selectedControls.has(ctrl.code);
-            return (
-              <button
-                key={ctrl.id}
-                onClick={() => onToggle(ctrl.code)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
-                  isSelected ? "bg-blue-50" : "hover:bg-gray-50"
-                }`}
-              >
-                <div
-                  className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                    isSelected ? "bg-blue-500 border-blue-500" : "border-gray-300"
-                  }`}
-                >
-                  {isSelected && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-                <span className="text-xs font-mono font-semibold text-gray-600 w-14 flex-shrink-0">{ctrl.code}</span>
-                <span className="text-xs text-gray-700 truncate">{ctrl.title}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
-      {selectedControls.size > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {Array.from(selectedControls).map((code) => (
-            <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-xs font-mono text-blue-700">
-              {code}
-              <button onClick={() => onToggle(code)} className="hover:text-red-500">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+function getRiskLevel(score: number) {
+  if (score <= 6) return { label: "Niedrig", color: "bg-green-100 text-green-800" };
+  if (score <= 12) return { label: "Mittel", color: "bg-yellow-100 text-yellow-800" };
+  if (score <= 19) return { label: "Hoch", color: "bg-orange-100 text-orange-800" };
+  return { label: "Kritisch", color: "bg-red-100 text-red-800" };
 }
 
-// Risk Calculation Modal
-function RiskCalculationModal({
-  isOpen,
-  onClose,
-  risk,
-  asset,
-  onCalculated,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  risk: RiskThreat | null;
-  asset: Asset | null;
-  onCalculated: () => void;
-}) {
-  const [bruttoProbability, setBruttoProbability] = useState(1);
-  const [bruttoImpact, setBruttoImpact] = useState(1);
-  const [nettoProbability, setNettoProbability] = useState(1);
-  const [nettoImpact, setNettoImpact] = useState(1);
-  const [mappedControlsSet, setMappedControlsSet] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+const CATEGORY_LABELS: Record<string, string> = {
+  process: "Prozesse",
+  software: "Software",
+  hardware: "Hardware",
+  location: "Standorte",
+  supplier: "Lieferanten",
+};
 
-  useEffect(() => {
-    if (risk && isOpen) {
-      setBruttoProbability(risk.bruttoProbability || 1);
-      setBruttoImpact(risk.bruttoImpact || 1);
-      setNettoProbability(risk.nettoProbability || 1);
-      setNettoImpact(risk.nettoImpact || 1);
-      try {
-        const mc = risk.controlsMapped ? JSON.parse(risk.controlsMapped) : [];
-        setMappedControlsSet(new Set(Array.isArray(mc) ? mc : []));
-      } catch {
-        setMappedControlsSet(new Set());
-      }
-    }
-  }, [risk, isOpen]);
+// ─────────────────────────────────────────────
+// Add Threat Modal
+// ─────────────────────────────────────────────
 
-  if (!isOpen || !risk || !asset) return null;
-
-  const toggleControl = (code: string) => {
-    setMappedControlsSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  };
-
-  // Berechnung mit CIA-Werten
-  const ciaFactor = asset.ciaAverage || 1;
-  const bruttoScore = Math.round(bruttoProbability * bruttoImpact * ciaFactor);
-  const nettoScore = Math.round(nettoProbability * nettoImpact * ciaFactor);
-  const reductionPct = bruttoScore > 0 ? Math.round(((bruttoScore - nettoScore) / bruttoScore) * 100) : 0;
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/risk-threats/${risk.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bruttoProbability,
-          bruttoImpact,
-          bruttoScore,
-          nettoProbability,
-          nettoImpact,
-          nettoScore,
-          mappedControls: JSON.stringify(Array.from(mappedControlsSet)),
-        }),
-      });
-
-      if (res.ok) {
-        onCalculated();
-        onClose();
-      }
-    } catch (error) {
-      console.error("Failed to save risk calculation:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getRiskLevel = (score: number) => {
-    if (score <= 5) return { label: "Low", color: "bg-green-100 text-green-800" };
-    if (score <= 10) return { label: "Medium", color: "bg-yellow-100 text-yellow-800" };
-    if (score <= 20) return { label: "High", color: "bg-orange-100 text-orange-800" };
-    return { label: "Critical", color: "bg-red-100 text-red-800" };
-  };
-
-  const bruttoLevel = getRiskLevel(bruttoScore);
-  const nettoLevel = getRiskLevel(nettoScore);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold">Calculate Risk</h2>
-            <p className="text-sm text-gray-500">
-              {risk.threatScenario.code} - {risk.threatScenario.name}
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="space-y-6">
-          {/* CIA Values Display */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-blue-900">Protection Need (CIA)</span>
-              <span className="text-lg font-bold text-blue-900">{ciaFactor.toFixed(2)}</span>
-            </div>
-            <div className="flex gap-4 text-sm text-blue-700">
-              <span>C: {asset.confidentiality}</span>
-              <span>I: {asset.integrity}</span>
-              <span>A: {asset.availability}</span>
-            </div>
-          </div>
-
-          {/* Brutto Risk */}
-          <div className="space-y-4">
-            <h3 className="font-medium text-gray-900">Gross Risk (Without Controls)</h3>
-
-            <div>
-              <label className="text-sm text-gray-600 block mb-2">Probability (1-5)</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => setBruttoProbability(value)}
-                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      bruttoProbability === value
-                        ? "bg-red-500 text-white border-red-500"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600 block mb-2">Impact (1-5)</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => setBruttoImpact(value)}
-                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      bruttoImpact === value
-                        ? "bg-red-500 text-white border-red-500"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Gross Risk Score</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">
-                    {bruttoProbability} x {bruttoImpact} x {ciaFactor.toFixed(1)} =
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${bruttoLevel.color}`}>
-                    {bruttoScore} ({bruttoLevel.label})
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Control Mapping */}
-          <ControlMappingSection
-            selectedControls={mappedControlsSet}
-            onToggle={toggleControl}
-          />
-
-          {/* Netto Risk */}
-          <div className="space-y-4">
-            <h3 className="font-medium text-gray-900">Net Risk (With Controls)</h3>
-
-            <div>
-              <label className="text-sm text-gray-600 block mb-2">Residual Probability (1-5)</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => setNettoProbability(value)}
-                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      nettoProbability === value
-                        ? "bg-green-500 text-white border-green-500"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600 block mb-2">Residual Impact (1-5)</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => setNettoImpact(value)}
-                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      nettoImpact === value
-                        ? "bg-green-500 text-white border-green-500"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Net Risk Score</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">
-                    {nettoProbability} x {nettoImpact} x {ciaFactor.toFixed(1)} =
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${nettoLevel.color}`}>
-                    {nettoScore} ({nettoLevel.label})
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Risk Reduction Summary */}
-          <div className="bg-gradient-to-r from-red-50 to-green-50 p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-900">Risk Reduction</span>
-              <span className={`text-lg font-bold ${reductionPct > 0 ? "text-green-700" : "text-gray-400"}`}>
-                {reductionPct > 0 ? `-${reductionPct}%` : "0%"}
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>Brutto: <strong className="text-red-600">{bruttoScore}</strong></span>
-              <span>-&gt;</span>
-              <span>Netto: <strong className="text-green-600">{nettoScore}</strong></span>
-              <span>|</span>
-              <span>{mappedControlsSet.size} Controls mapped</span>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 bg-[#0066FF] hover:bg-blue-700"
-              disabled={loading}
-              onClick={handleSave}
-            >
-              {loading ? "Saving..." : "Save Calculation"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Add Threat Modal - Simple Assignment (No Calculation)
 function AddThreatModal({
   isOpen,
   onClose,
@@ -682,76 +199,66 @@ function AddThreatModal({
 
   useEffect(() => {
     if (isOpen) {
-      loadThreats();
+      setLoading(true);
+      fetch(`/api/threats?assetId=${assetId}`)
+        .then((r) => r.json())
+        .then((data) => setThreats(data.filter((t: ThreatScenario) => !t.alreadyAssigned)))
+        .catch(console.error)
+        .finally(() => setLoading(false));
     }
-  }, [isOpen]);
-
-  const loadThreats = async () => {
-    try {
-      const res = await fetch(`/api/threats?assetId=${assetId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setThreats(data.filter((t: ThreatScenario) => !t.alreadyAssigned));
-      }
-    } catch (error) {
-      console.error("Failed to load threats:", error);
-    }
-  };
+  }, [isOpen, assetId]);
 
   const toggleThreat = (threatId: string) => {
     setSelectedThreats((prev) =>
-      prev.includes(threatId)
-        ? prev.filter((id) => id !== threatId)
-        : [...prev, threatId]
+      prev.includes(threatId) ? prev.filter((id) => id !== threatId) : [...prev, threatId]
     );
-  };
-
-  const selectAll = () => {
-    const visibleThreats = filteredThreats.map((t) => t.id);
-    const allSelected = visibleThreats.every((id) => selectedThreats.includes(id));
-    if (allSelected) {
-      setSelectedThreats((prev) => prev.filter((id) => !visibleThreats.includes(id)));
-    } else {
-      setSelectedThreats((prev) => [...new Set([...prev, ...visibleThreats])]);
-    }
   };
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case "Technical": return "bg-blue-50 text-blue-700 border-blue-200";
-      case "Physical": return "bg-orange-50 text-orange-700 border-orange-200";
-      case "Operational": return "bg-purple-50 text-purple-700 border-purple-200";
-      case "Legal": return "bg-red-50 text-red-700 border-red-200";
-      default: return "bg-gray-50 text-gray-700 border-gray-200";
+      case "Technical": return "bg-blue-100 text-blue-700 border-blue-200";
+      case "Physical": return "bg-orange-100 text-orange-700 border-orange-200";
+      case "Operational": return "bg-purple-100 text-purple-700 border-purple-200";
+      case "Legal": return "bg-red-100 text-red-700 border-red-200";
+      default: return "bg-gray-100 text-gray-700 border-gray-200";
     }
   };
 
+  const filteredThreats = threats.filter((t) => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      t.name.toLowerCase().includes(q) ||
+      t.code.toLowerCase().includes(q) ||
+      t.description?.toLowerCase().includes(q);
+    const matchesCategory = filterCategory === "all" || t.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const categories = [...new Set(threats.map((t) => t.category))];
+
   const handleSubmit = async () => {
     if (selectedThreats.length === 0) return;
-
     setLoading(true);
     try {
-      // Alle ausgewählten Threats speichern mit Default-Werten
-      const promises = selectedThreats.map((threatId) =>
-        fetch("/api/risk-threats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            assetId,
-            threatId,
-            bruttoProbability: 1,
-            bruttoImpact: 1,
-            bruttoScore: 1,
-            nettoProbability: 1,
-            nettoImpact: 1,
-            nettoScore: 1,
-            mappedControls: "[]",
-          }),
-        })
+      await Promise.all(
+        selectedThreats.map((threatId) =>
+          fetch("/api/risk-threats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assetId,
+              threatId,
+              bruttoProbability: 1,
+              bruttoImpact: 1,
+              bruttoScore: 1,
+              nettoProbability: 1,
+              nettoImpact: 1,
+              nettoScore: 1,
+              mappedControls: "[]",
+            }),
+          })
+        )
       );
-
-      await Promise.all(promises);
-
       onThreatAdded();
       onClose();
       setSelectedThreats([]);
@@ -762,157 +269,125 @@ function AddThreatModal({
     }
   };
 
-  const filteredThreats = threats.filter((t) => {
-    const matchesSearch =
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = filterCategory === "all" || t.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const categories = [...new Set(threats.map((t) => t.category))];
-
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
-            <h2 className="text-lg font-semibold">Assign Threat Scenarios</h2>
-            <p className="text-sm text-gray-500">
-              {selectedThreats.length} selected
+            <h2 className="text-lg font-semibold text-gray-900">Bedrohungsszenarien zuweisen</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {selectedThreats.length > 0 ? `${selectedThreats.length} ausgewählt` : "Szenarien aus dem Katalog wählen"}
             </p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Filters */}
-          <div className="p-4 border-b space-y-3">
+        <div className="px-6 py-3 border-b space-y-2">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search threats..."
+              placeholder="Bedrohung suchen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <div className="flex gap-2 flex-wrap">
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setFilterCategory("all")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                filterCategory === "all" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Alle
+            </button>
+            {categories.map((cat) => (
               <button
-                onClick={() => setFilterCategory("all")}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                  filterCategory === "all"
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                key={cat}
+                onClick={() => setFilterCategory(cat)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  filterCategory === cat ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                All
+                {cat}
               </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setFilterCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                    filterCategory === cat
-                      ? "bg-gray-800 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">
-                {filteredThreats.length} threats available
-              </span>
-              <button
-                onClick={selectAll}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Select All Visible
-              </button>
-            </div>
-          </div>
-
-          {/* Threat List - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {filteredThreats.length === 0 ? (
-              <p className="text-center text-gray-400 py-8">No threats found</p>
-            ) : (
-              filteredThreats.map((threat) => {
-                const isSelected = selectedThreats.includes(threat.id);
-                return (
-                  <div
-                    key={threat.id}
-                    onClick={() => toggleThreat(threat.id)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-100 hover:border-gray-300 bg-white"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* Checkbox */}
-                      <div
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                          isSelected
-                            ? "bg-blue-500 border-blue-500"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        {isSelected && (
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </div>
-                      
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="font-mono text-xs bg-gray-800 text-white px-2 py-0.5 rounded">
-                            {threat.code}
-                          </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${getCategoryColor(threat.category)}`}>
-                            {threat.category}
-                          </span>
-                        </div>
-                        <h4 className="font-medium text-gray-900 mb-1">{threat.name}</h4>
-                        <p className="text-sm text-gray-500 line-clamp-2">{threat.description}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+            ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            className="bg-[#0066FF] hover:bg-blue-700"
-            disabled={selectedThreats.length === 0 || loading}
-            onClick={handleSubmit}
-          >
-            {loading ? "Assigning..." : `Assign ${selectedThreats.length} Threat(s)`}
-          </Button>
+        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : filteredThreats.length === 0 ? (
+            <p className="text-center text-gray-400 py-12 text-sm">Keine Bedrohungen gefunden</p>
+          ) : (
+            filteredThreats.map((threat) => {
+              const isSelected = selectedThreats.includes(threat.id);
+              return (
+                <div
+                  key={threat.id}
+                  onClick={() => toggleThreat(threat.id)}
+                  className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-all ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <div
+                    className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                      isSelected ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                    }`}
+                  >
+                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-mono text-xs bg-gray-800 text-white px-2 py-0.5 rounded">
+                        {threat.code}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${getCategoryColor(threat.category)}`}>
+                        {threat.category}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900">{threat.name}</p>
+                    <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">{threat.description}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+          <span className="text-sm text-gray-500">{filteredThreats.length} verfügbar</span>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={onClose}>Abbrechen</Button>
+            <Button
+              className="bg-[#0066FF] hover:bg-blue-700"
+              disabled={selectedThreats.length === 0 || loading}
+              onClick={handleSubmit}
+            >
+              {loading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}
+              {selectedThreats.length > 0 ? `${selectedThreats.length} hinzufügen` : "Hinzufügen"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+// ─────────────────────────────────────────────
 // Link Asset Modal
+// ─────────────────────────────────────────────
+
 function LinkAssetModal({
   isOpen,
   onClose,
@@ -924,32 +399,22 @@ function LinkAssetModal({
   assetId: string;
   onLinked: () => void;
 }) {
-  const [availableAssets, setAvailableAssets] = useState<any[]>([]);
+  const [availableAssets, setAvailableAssets] = useState<Array<{ id: string; name: string; category: string }>>([]);
   const [selectedAsset, setSelectedAsset] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (isOpen) {
-      loadAvailableAssets();
+      fetch(`/api/assets/available?excludeId=${assetId}`)
+        .then((r) => r.json())
+        .then((data) => setAvailableAssets(data))
+        .catch(console.error);
     }
-  }, [isOpen]);
-
-  const loadAvailableAssets = async () => {
-    try {
-      const res = await fetch(`/api/assets/available?excludeId=${assetId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableAssets(data);
-      }
-    } catch (error) {
-      console.error("Failed to load available assets:", error);
-    }
-  };
+  }, [isOpen, assetId]);
 
   const handleLink = async () => {
     if (!selectedAsset) return;
-    
     setLoading(true);
     try {
       const res = await fetch(`/api/assets/${assetId}/linked`, {
@@ -957,7 +422,6 @@ function LinkAssetModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secondaryId: selectedAsset }),
       });
-
       if (res.ok) {
         onLinked();
         onClose();
@@ -974,47 +438,33 @@ function LinkAssetModal({
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const categoryLabels: Record<string, string> = {
-    process: "Process",
-    software: "Software",
-    hardware: "Hardware",
-    location: "Location",
-    supplier: "Supplier",
-  };
-
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Link Asset</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <h2 className="text-lg font-semibold text-gray-900">Asset verknüpfen</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Select an asset to link to this asset:
-          </p>
-
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search assets..."
+              placeholder="Asset suchen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-2">
+          <div className="max-h-64 overflow-y-auto space-y-1.5 border rounded-lg p-2">
             {filteredAssets.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                No available assets found
-              </p>
+              <p className="text-sm text-gray-400 text-center py-4">Keine Assets verfügbar</p>
             ) : (
               filteredAssets.map((asset) => (
                 <div
@@ -1028,25 +478,23 @@ function LinkAssetModal({
                 >
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                      {categoryLabels[asset.category] || asset.category}
+                      {CATEGORY_LABELS[asset.category] || asset.category}
                     </span>
-                    <span className="font-medium text-sm">{asset.name}</span>
+                    <span className="font-medium text-sm text-gray-900">{asset.name}</span>
                   </div>
                 </div>
               ))
             )}
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={onClose} className="flex-1">Abbrechen</Button>
             <Button
               className="flex-1 bg-[#0066FF] hover:bg-blue-700"
               disabled={!selectedAsset || loading}
               onClick={handleLink}
             >
-              {loading ? "Linking..." : "Link Asset"}
+              {loading ? "Verknüpfen..." : "Asset verknüpfen"}
             </Button>
           </div>
         </div>
@@ -1055,147 +503,96 @@ function LinkAssetModal({
   );
 }
 
-// Asset Tree Node Component
-function AssetTreeNode({ 
-  asset, 
-  level = 0,
+// ─────────────────────────────────────────────
+// Linked Assets List
+// ─────────────────────────────────────────────
+
+function LinkedAssetsList({
+  linkedAssets,
   onAddClick,
-  isAddButton = false
-}: { 
-  asset?: LinkedAsset["asset"]; 
-  level?: number;
-  onAddClick?: () => void;
-  isAddButton?: boolean;
+}: {
+  linkedAssets: LinkedAsset[];
+  onAddClick: () => void;
 }) {
   const router = useRouter();
-  
-  if (isAddButton) {
+
+  if (linkedAssets.length === 0) {
     return (
-      <div 
-        className="flex flex-col items-center cursor-pointer group"
-        onClick={onAddClick}
-      >
-        <div className="w-px h-8 bg-gray-300 mb-2"></div>
-        <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-full text-green-600 text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Add new
-        </div>
+      <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+        <Link2 className="h-10 w-10 mb-3 text-gray-200" />
+        <p className="text-sm">Keine verknüpften Assets</p>
+        <Button className="mt-4 bg-[#0066FF] hover:bg-blue-700" size="sm" onClick={onAddClick}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Asset verknüpfen
+        </Button>
       </div>
     );
   }
 
-  if (!asset) return null;
-
   return (
-    <div 
-      className="flex flex-col items-center cursor-pointer group"
-      onClick={() => router.push(`/risks/${asset.id}`)}
-    >
-      {level > 0 && <div className="w-px h-6 bg-gray-300 mb-1"></div>}
-      <div className="px-4 py-2 bg-white border border-gray-200 rounded-full text-gray-700 text-sm hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm">
-        {asset.name}
-      </div>
+    <div className="space-y-2">
+      {linkedAssets.map((link) => (
+        <div
+          key={link.id}
+          onClick={() => router.push(`/risks/${link.asset.id}`)}
+          className="flex items-center justify-between rounded-lg border border-gray-100 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+              {CATEGORY_LABELS[link.asset.category] || link.asset.category}
+            </span>
+            <span className="text-sm font-medium text-gray-900">{link.asset.name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {link.asset.ciaAverage > 0 && (
+              <span className="text-xs text-gray-500">CIA: {link.asset.ciaAverage.toFixed(2)}</span>
+            )}
+            <ChevronRight className="h-4 w-4 text-gray-300" />
+          </div>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" className="w-full mt-2" onClick={onAddClick}>
+        <Plus className="h-4 w-4 mr-1.5" />
+        Weiteres Asset verknüpfen
+      </Button>
     </div>
   );
 }
 
-// Linked Assets Tree Component
-function LinkedAssetsTree({ 
-  linkedAssets, 
-  onAddClick 
-}: { 
-  linkedAssets: LinkedAsset[];
-  onAddClick: () => void;
-}) {
-  // Gruppiere nach Kategorie
-  const groupedByCategory = linkedAssets.reduce((acc, link) => {
-    const cat = link.asset.category;
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(link);
-    return acc;
-  }, {} as Record<string, LinkedAsset[]>);
-
-  const categoryLabels: Record<string, string> = {
-    process: "Processes",
-    software: "Software",
-    hardware: "Hardware",
-    location: "Locations",
-    supplier: "Suppliers",
-  };
-
-  const categories = Object.keys(groupedByCategory);
-
-  return (
-    <div className="flex flex-col items-center py-8">
-      {/* Root */}
-      <div className="mb-8">
-        <div className="px-6 py-3 bg-blue-50 border border-blue-200 rounded-full text-blue-800 font-medium">
-          Assets
-        </div>
-      </div>
-
-      {/* Connector */}
-      {categories.length > 0 && <div className="w-px h-8 bg-gray-300"></div>}
-
-      {/* Categories Row */}
-      {categories.length > 0 && (
-        <div className="flex gap-16 relative">
-          {/* Horizontal connector */}
-          <div className="absolute top-0 left-0 right-0 h-px bg-gray-300" style={{ 
-            marginLeft: `${100 / categories.length / 2}%`,
-            marginRight: `${100 / categories.length / 2}%`
-          }}></div>
-          
-          {categories.map((category) => (
-            <div key={category} className="flex flex-col items-center">
-              {/* Vertical connector */}
-              <div className="w-px h-8 bg-gray-300"></div>
-              
-              {/* Category Node */}
-              <div className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-full text-gray-700 text-sm font-medium mb-4">
-                {categoryLabels[category] || category}
-              </div>
-
-              {/* Assets under this category */}
-              <div className="flex flex-col items-center gap-3">
-                {groupedByCategory[category].map((link, idx) => (
-                  <AssetTreeNode 
-                    key={link.id} 
-                    asset={link.asset} 
-                    level={1}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add Button */}
-      <div className="mt-8">
-        <AssetTreeNode onAddClick={onAddClick} isAddButton />
-      </div>
-    </div>
-  );
-}
+// ─────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────
 
 export default function AssetDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+
   const [asset, setAsset] = useState<Asset | null>(null);
   const [linkedAssets, setLinkedAssets] = useState<LinkedAsset[]>([]);
   const [riskThreats, setRiskThreats] = useState<RiskThreat[]>([]);
-  const [activeTab, setActiveTab] = useState(
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("tab") || "calculation"
-      : "calculation"
-  );
   const [loading, setLoading] = useState(true);
-  const [isCIAModalOpen, setIsCIAModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Inline CIA state
+  const [confidentiality, setConfidentiality] = useState(1);
+  const [integrity, setIntegrity] = useState(1);
+  const [availability, setAvailability] = useState(1);
+
+  // Asset name/description (editable)
+  const [assetName, setAssetName] = useState("");
+  const [assetDescription, setAssetDescription] = useState("");
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<"threats" | "linked" | "sbom">("threats");
+  const [riskTab, setRiskTab] = useState<"alle" | "massnahmen">("alle");
+
+  // Panel
+
+  // Modals
   const [isAddThreatModalOpen, setIsAddThreatModalOpen] = useState(false);
   const [isLinkAssetModalOpen, setIsLinkAssetModalOpen] = useState(false);
-  const [editingRisk, setEditingRisk] = useState<RiskThreat | null>(null);
-  const [isRiskCalculationModalOpen, setIsRiskCalculationModalOpen] = useState(false);
+
+  // SBOM
   const [sboms, setSboms] = useState<SBOM[]>([]);
   const [selectedSbom, setSelectedSbom] = useState<SBOMDetail | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -1204,19 +601,33 @@ export default function AssetDetailPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
+  // Computed CIA score
+  const ciaScore = useMemo(() => {
+    if (confidentiality > 0 && integrity > 0 && availability > 0) {
+      return ((confidentiality + integrity + availability) / 3);
+    }
+    return 0;
+  }, [confidentiality, integrity, availability]);
+
   useEffect(() => {
     loadAsset();
     loadLinkedAssets();
     loadRiskThreats();
     loadSBOMs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadAsset = async () => {
     try {
       const res = await fetch(`/api/assets/${id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data: Asset = await res.json();
         setAsset(data);
+        setAssetName(data.name);
+        setAssetDescription(data.description || "");
+        setConfidentiality(data.confidentiality || 1);
+        setIntegrity(data.integrity || 1);
+        setAvailability(data.availability || 1);
       }
     } catch (error) {
       console.error("Failed to load asset:", error);
@@ -1228,10 +639,7 @@ export default function AssetDetailPage() {
   const loadLinkedAssets = async () => {
     try {
       const res = await fetch(`/api/assets/${id}/linked`);
-      if (res.ok) {
-        const data = await res.json();
-        setLinkedAssets(data);
-      }
+      if (res.ok) setLinkedAssets(await res.json());
     } catch (error) {
       console.error("Failed to load linked assets:", error);
     }
@@ -1240,10 +648,7 @@ export default function AssetDetailPage() {
   const loadRiskThreats = async () => {
     try {
       const res = await fetch(`/api/risk-threats?assetId=${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRiskThreats(data);
-      }
+      if (res.ok) setRiskThreats(await res.json());
     } catch (error) {
       console.error("Failed to load risk threats:", error);
     }
@@ -1252,12 +657,36 @@ export default function AssetDetailPage() {
   const loadSBOMs = async () => {
     try {
       const res = await fetch(`/api/assets/${id}/sbom`);
-      if (res.ok) {
-        const data = await res.json();
-        setSboms(data);
-      }
+      if (res.ok) setSboms(await res.json());
     } catch (error) {
       console.error("Failed to load SBOMs:", error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!asset) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/assets/${asset.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: assetName,
+          description: assetDescription,
+          category: asset.category,
+          confidentiality,
+          integrity,
+          availability,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAsset((prev) => prev ? { ...prev, ...updated } : prev);
+      }
+    } catch (error) {
+      console.error("Failed to save asset:", error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1267,632 +696,749 @@ export default function AssetDetailPage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const getCiaBadge = () => {
-    if (!asset?.ciaAverage || asset.ciaAverage === 0) {
-      return (
-        <span className="px-3 py-1 rounded-full text-sm font-medium bg-orange-50 text-orange-600 border border-orange-100">
-          NA
-        </span>
-      );
-    }
+  if (loading) {
     return (
-      <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-50 text-green-600 border border-green-100">
-        {asset.ciaAverage.toFixed(2)}
-      </span>
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0066FF]" />
+      </div>
     );
-  };
+  }
 
-  const getRiskLevel = (score: number) => {
-    if (score <= 6) return { label: "Low", color: "bg-green-100 text-green-800" };
-    if (score <= 12) return { label: "Medium", color: "bg-yellow-100 text-yellow-800" };
-    if (score <= 19) return { label: "High", color: "bg-orange-100 text-orange-800" };
-    return { label: "Critical", color: "bg-red-100 text-red-800" };
-  };
+  if (!asset) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-3">
+        <AlertTriangle className="h-10 w-10 text-red-400" />
+        <p className="text-sm text-red-600">Asset nicht gefunden.</p>
+        <Button variant="outline" size="sm" onClick={() => router.push("/risks")}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Zurück
+        </Button>
+      </div>
+    );
+  }
 
-  const categoryLabels: Record<string, string> = {
-    process: "Processes",
-    software: "Software",
-    hardware: "Hardware",
-    location: "Locations",
-    supplier: "Suppliers",
-  };
+  const highRisks = riskThreats.filter((rt) => rt.v1BruttoScore >= 8).length;
+  const withControls = riskThreats.filter((rt) => {
+    try { const mc = JSON.parse(rt.controlsMapped); return Array.isArray(mc) && mc.length > 0; } catch { return false; }
+  }).length;
+  const nettoCalc = riskThreats.filter((rt) => rt.nettoSchadenStufe > 1 || rt.v1NettoScore !== rt.v1BruttoScore).length;
 
-  if (loading) return <div className="p-8">Loading...</div>;
-  if (!asset) return <div className="p-8">Asset not found</div>;
+  // SBOM snippets
+  const assetIdVal = id as string;
+  const apiUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/sbom/upload`
+    : "https://your-trustspace.domain/api/sbom/upload";
+
+  const githubSnippet = `name: SBOM Upload to TrustSpace\n\non:\n  push:\n    branches: [main]\n\njobs:\n  sbom:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - run: npm ci\n      - name: Generate SBOM\n        run: npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6\n      - name: Upload SBOM to TrustSpace\n        run: |\n          curl -X POST ${apiUrl} \\\\\n            -F "file=@sbom.json" \\\\\n            -F "assetId=${assetIdVal}" \\\\\n            -F "versionLabel=\${{ github.sha }}"`;
+  const gitlabSnippet = `sbom-upload:\n  stage: deploy\n  image: node:20\n  script:\n    - npm ci\n    - npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6\n    - |\n      curl -X POST ${apiUrl} \\\\\n        -F "file=@sbom.json" \\\\\n        -F "assetId=${assetIdVal}" \\\\\n        -F "versionLabel=$CI_COMMIT_SHA"\n  only:\n    - main`;
+  const curlSnippet = `# 1. SBOM generieren\nnpx @cyclonedx/cyclonedx-npm \\\\\n  --output-format JSON \\\\\n  --output-file sbom.json \\\\\n  --spec-version 1.6\n\n# 2. An TrustSpace senden\ncurl -X POST ${apiUrl} \\\\\n  -F "file=@sbom.json" \\\\\n  -F "assetId=${assetIdVal}" \\\\\n  -F "versionLabel=1.0.0"`;
+  const snippetTabs = [
+    { key: "github" as const, label: "GitHub Actions", snippet: githubSnippet },
+    { key: "gitlab" as const, label: "GitLab CI", snippet: gitlabSnippet },
+    { key: "curl" as const, label: "curl / manuell", snippet: curlSnippet },
+  ];
+  const activeSnippet = snippetTabs.find((t) => t.key === connectTab)?.snippet ?? "";
 
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/risks" className="hover:text-gray-900">Risk & Asset Management</Link>
-        <span className="text-gray-400">/</span>
-        <Link href={`/risks/category/${asset.category === "process" ? "processes" : asset.category + "s"}`} className="hover:text-gray-900">
-          {categoryLabels[asset.category] || asset.category}
+        <Link href="/risks" className="hover:text-gray-700 transition-colors">
+          Risk & Asset Management
         </Link>
-        <span className="text-gray-400">/</span>
-        <span className="text-gray-900">{asset.name}</span>
+        <ChevronRight className="h-4 w-4" />
+        <Link
+          href={`/risks/category/${asset.category === "process" ? "processes" : asset.category + "s"}`}
+          className="hover:text-gray-700 transition-colors"
+        >
+          {CATEGORY_LABELS[asset.category] || asset.category}
+        </Link>
+        <ChevronRight className="h-4 w-4" />
+        <span className="text-gray-900 font-medium truncate max-w-xs">{asset.name}</span>
       </div>
 
-      {/* Main Content Grid */}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={() => router.push("/risks")}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Zurück
+        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAddThreatModalOpen(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Bedrohungsszenario hinzufügen
+          </Button>
+          <Button
+            className="bg-[#0066FF] hover:bg-blue-700"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Speichern
+          </Button>
+        </div>
+      </div>
+
+      {/* Two Column Layout */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Left Panel - Details */}
-        <div className="col-span-5 space-y-4">
-          <div className="bg-white rounded-lg p-6 border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Details</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Saved</span>
-                <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete Asset
+        {/* Left Column */}
+        <div className="col-span-7 space-y-6">
+          {/* Grunddaten */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Grunddaten</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-xs text-gray-500">Name</Label>
+                <Input
+                  value={assetName}
+                  onChange={(e) => setAssetName(e.target.value)}
+                  placeholder="Asset-Name..."
+                  className="mt-1 font-semibold"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Beschreibung</Label>
+                <textarea
+                  value={assetDescription}
+                  onChange={(e) => setAssetDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Beschreibung des Assets..."
+                  className="mt-1 w-full px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-gray-500">Kategorie</Label>
+                  <div className="mt-1 px-3 py-2 border border-input rounded-md text-sm bg-gray-50 text-gray-700">
+                    {CATEGORY_LABELS[asset.category] || asset.category}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Erstellt am</Label>
+                  <div className="mt-1 px-3 py-2 border border-input rounded-md text-sm bg-gray-50 text-gray-700">
+                    {new Date(asset.createdAt).toLocaleDateString("de-DE")}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Risk Threats Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">
+                  Bedrohungsszenarien ({riskThreats.length})
+                </CardTitle>
+                <Button
+                  size="sm"
+                  className="bg-[#0066FF] hover:bg-blue-700 h-7 text-xs"
+                  onClick={() => setIsAddThreatModalOpen(true)}
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Hinzufügen
                 </Button>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Stats */}
+              {riskThreats.length > 0 && (
+                <div className="grid grid-cols-4 gap-0 border-b divide-x">
+                  {[
+                    { label: "Gesamt", value: riskThreats.length, color: "text-gray-900" },
+                    { label: "Hoch/Krit.", value: highRisks, color: "text-amber-600" },
+                    { label: "Mit Maßnahmen", value: withControls, color: "text-emerald-600" },
+                    { label: "Netto-Berechnet", value: nettoCalc, color: "text-blue-600" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="p-3 text-center">
+                      <p className={`text-xl font-bold ${color}`}>{value}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-            <div className="space-y-6">
-              {/* Owners */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Owners</label>
-                <button className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Plus className="w-4 h-4" />
-                  </div>
-                  <span>Add owner</span>
-                  <Plus className="w-4 h-4 text-blue-600" />
+              {/* Sub-tabs */}
+              <div className="flex border-b">
+                <button
+                  onClick={() => setRiskTab("alle")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                    riskTab === "alle" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  Alle Risiken
+                </button>
+                <button
+                  onClick={() => setRiskTab("massnahmen")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                    riskTab === "massnahmen" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Maßnahmen & Berechnung
                 </button>
               </div>
 
-              {/* Created on */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Created on :</label>
-                <p className="text-sm text-gray-900">
-                  {new Date(asset.createdAt).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
-
-              {/* Asset Name */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Asset Name</label>
-                <Input 
-                  defaultValue={asset.name} 
-                  className="bg-white"
-                />
-              </div>
-
-              {/* Aggregate Assets (Description) */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Aggregate Assets</label>
-                <textarea
-                  defaultValue={asset.description}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Classification */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Classification</label>
-                <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>N/A</option>
-                  <option>Public</option>
-                  <option>Internal</option>
-                  <option>Confidential</option>
-                  <option>Secret</option>
-                </select>
-              </div>
-
-              {/* Location */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Location</label>
-                <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>N/A</option>
-                  <option>Headquarters</option>
-                  <option>Branch Office</option>
-                  <option>Remote</option>
-                </select>
-              </div>
-
-              {/* Legal Responsibility */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Legal Responsibility</label>
-                <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select an option</option>
-                  <option>Data Controller</option>
-                  <option>Data Processor</option>
-                  <option>Joint Controller</option>
-                </select>
-              </div>
-
-              {/* Department */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Department</label>
-                <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select an option</option>
-                  <option>IT</option>
-                  <option>HR</option>
-                  <option>Finance</option>
-                  <option>Operations</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel - Need For Protection */}
-        <div className="col-span-7 space-y-4">
-          <div className="bg-white rounded-lg p-6 border border-gray-100">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-gray-900">Need For Protection :</h2>
-                {getCiaBadge()}
-                <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" />
-                  Open
-                </span>
-              </div>
-              <Button 
-                className="bg-[#0066FF] hover:bg-blue-700"
-                onClick={() => setIsCIAModalOpen(true)}
-              >
-                <Calculator className="w-4 h-4 mr-2" />
-                {asset.ciaAverage > 0 ? "Edit CIA" : "Calculate"}
-              </Button>
-            </div>
-
-            {/* CIA Values Display */}
-            {asset.ciaAverage > 0 && (
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <p className="text-xs text-blue-600 mb-1">Confidentiality</p>
-                  <p className="text-xl font-bold text-blue-900">{asset.confidentiality}</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <p className="text-xs text-blue-600 mb-1">Integrity</p>
-                  <p className="text-xl font-bold text-blue-900">{asset.integrity}</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <p className="text-xs text-blue-600 mb-1">Availability</p>
-                  <p className="text-xl font-bold text-blue-900">{asset.availability}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full bg-gray-50 p-1 rounded-lg mb-6">
-                <TabsTrigger value="calculation" className="flex-1 data-[state=active]:bg-white">
-                  Calculation History
-                </TabsTrigger>
-                <TabsTrigger value="threats" className="flex-1 data-[state=active]:bg-white">
-                  Threat Scenarios ({riskThreats.length})
-                </TabsTrigger>
-                <TabsTrigger value="linked" className="flex-1 data-[state=active]:bg-white">
-                  Linked Assets ({linkedAssets.length})
-                </TabsTrigger>
-                <TabsTrigger value="sbom" className="flex-1 data-[state=active]:bg-white">
-                  SBOM ({sboms.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="calculation" className="mt-0">
-                {!asset.ciaAverage || asset.ciaAverage === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Calculator className="w-12 h-12 mb-4 text-gray-300" />
-                    <p className="text-lg">No Calculation to display</p>
-                    <p className="text-sm mt-2">Click "Calculate" to enter CIA values</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-500 pb-2 border-b">
-                      <span>Date</span>
-                      <span>CIA Values</span>
-                      <span>Average</span>
-                      <span>Status</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4 text-sm py-3 items-center">
-                      <span>{new Date(asset.updatedAt || asset.createdAt).toLocaleDateString()}</span>
-                      <span>C:{asset.confidentiality} I:{asset.integrity} A:{asset.availability}</span>
-                      <span className="font-medium text-green-600">{asset.ciaAverage.toFixed(2)}</span>
-                      <span className="text-green-600 text-xs">✓ Calculated</span>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="threats" className="mt-0">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm text-gray-500">
-                    {riskThreats.length} threat scenario(s) assigned
-                  </p>
-                  <Button 
-                    className="bg-[#0066FF] hover:bg-blue-700"
-                    onClick={() => setIsAddThreatModalOpen(true)}
-                  >
+              {riskThreats.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-14 text-gray-400">
+                  <Shield className="w-10 w-10 mb-3 text-gray-200" />
+                  <p className="text-sm">Keine Bedrohungsszenarien zugewiesen</p>
+                  <Button className="mt-4 bg-[#0066FF] hover:bg-blue-700" size="sm" onClick={() => setIsAddThreatModalOpen(true)}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Add Threat Scenario
+                    Bedrohungsszenario hinzufügen
                   </Button>
                 </div>
-
-                {riskThreats.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Shield className="w-12 h-12 mb-4 text-gray-300" />
-                    <p className="text-lg">No threats assigned</p>
-                    <Button 
-                      className="mt-4 bg-[#0066FF]"
-                      onClick={() => setIsAddThreatModalOpen(true)}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Threat Scenario
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {riskThreats.map((rt) => {
-                      const bruttoLevel = getRiskLevel(rt.bruttoScore);
-                      const nettoLevel = getRiskLevel(rt.nettoScore);
-                      let controlCount = 0;
-                      try {
-                        const mc = rt.controlsMapped ? JSON.parse(rt.controlsMapped) : [];
-                        controlCount = Array.isArray(mc) ? mc.length : 0;
-                      } catch { /* */ }
-                      const reductionPct = rt.bruttoScore > 1 && rt.nettoScore < rt.bruttoScore
-                        ? Math.round(((rt.bruttoScore - rt.nettoScore) / rt.bruttoScore) * 100)
-                        : 0;
-                      const statusTag = rt.bruttoScore <= 1
-                        ? { label: "Offen", color: "bg-gray-100 text-gray-500" }
-                        : controlCount > 0 && rt.nettoScore < rt.bruttoScore
-                        ? { label: "Mitigiert", color: "bg-emerald-100 text-emerald-700" }
-                        : controlCount > 0
-                        ? { label: "Maßnahmen", color: "bg-blue-100 text-blue-700" }
-                        : { label: "Unbehandelt", color: "bg-orange-100 text-orange-700" };
-
-                      return (
-                        <div
-                          key={rt.id}
-                          className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 hover:shadow-sm cursor-pointer transition-all"
-                          onClick={() => {
-                            setEditingRisk(rt);
-                            setIsRiskCalculationModalOpen(true);
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">
-                                  {rt.threatScenario.code}
-                                </span>
-                                <span className="font-medium text-gray-900">{rt.threatScenario.name}</span>
-                              </div>
-                              <p className="text-sm text-gray-500 truncate">{rt.threatScenario.description}</p>
-                            </div>
-                            <div className="flex items-center gap-3 flex-shrink-0">
-                              {/* Status Tag */}
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusTag.color}`}>
-                                {statusTag.label}
+              ) : riskTab === "alle" ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Szenario</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Bezeichnung</th>
+                        <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Schaden</th>
+                        <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Wahrsch.</th>
+                        <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Brutto</th>
+                        <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Netto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {riskThreats.map((rt) => {
+                        const bruttoLevel = getRiskLevel(Math.round(rt.v1BruttoScore));
+                        const nettoLevel = getRiskLevel(Math.round(rt.v1NettoScore));
+                        return (
+                          <tr
+                            key={rt.id}
+                            className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                            onClick={() => router.push(`/risks/threats/${rt.id}`)}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{rt.threatScenario.code}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-gray-700 truncate max-w-[200px] block">{rt.threatScenario.name}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center text-sm text-gray-600">{rt.schadenStufe}</td>
+                            <td className="px-3 py-3 text-center text-sm text-gray-600">{rt.wahrscheinlichkeitStufe}</td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${bruttoLevel.color}`}>
+                                {rt.v1BruttoScore.toFixed(2)}
                               </span>
-                              {/* Controls badge */}
-                              {controlCount > 0 && (
-                                <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                  <Shield className="w-3 h-3" />
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {rt.v1NettoScore !== rt.v1BruttoScore ? (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${nettoLevel.color}`}>
+                                  {rt.v1NettoScore.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Szenario</th>
+                        <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Maßnahmen</th>
+                        <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                        <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Brutto</th>
+                        <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Netto</th>
+                        <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Reduktion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {riskThreats.map((rt) => {
+                        let controlCount = 0;
+                        try { const mc = JSON.parse(rt.controlsMapped); controlCount = Array.isArray(mc) ? mc.length : 0; } catch { /* */ }
+                        const isNettoCalc = rt.nettoSchadenStufe > 1 || rt.v1NettoScore !== rt.v1BruttoScore;
+                        const reduktion = isNettoCalc && rt.v1BruttoScore > 0
+                          ? Math.round(((rt.v1BruttoScore - rt.v1NettoScore) / rt.v1BruttoScore) * 100)
+                          : null;
+                        const bruttoLevel = getRiskLevel(Math.round(rt.v1BruttoScore));
+                        const nettoLevel = getRiskLevel(Math.round(rt.v1NettoScore));
+                        return (
+                          <tr
+                            key={rt.id}
+                            className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                            onClick={() => router.push(`/risks/threats/${rt.id}`)}
+                          >
+                            <td className="px-4 py-3">
+                              <div>
+                                <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{rt.threatScenario.code}</span>
+                                <span className="text-xs text-gray-700 ml-2">{rt.threatScenario.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {controlCount === 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Keine
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                  <CheckCircle2 className="h-3 w-3" />
                                   {controlCount}
                                 </span>
                               )}
-                              {/* Brutto */}
-                              <div className="text-right">
-                                <p className="text-xs text-gray-400">Brutto</p>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${bruttoLevel.color}`}>
-                                    {bruttoLevel.label}
-                                  </span>
-                                  <span className="font-bold text-red-600">{rt.bruttoScore}</span>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-4 h-4 text-gray-300" />
-                              {/* Netto */}
-                              <div className="text-right">
-                                <p className="text-xs text-gray-400">
-                                  Netto{reductionPct > 0 && <span className="text-emerald-600 ml-1">-{reductionPct}%</span>}
-                                </p>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${nettoLevel.color}`}>
-                                    {nettoLevel.label}
-                                  </span>
-                                  <span className="font-bold text-green-600">{rt.nettoScore}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="linked" className="mt-0">
-                {linkedAssets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Link2 className="w-12 h-12 mb-4 text-gray-300" />
-                    <p className="text-lg">No linked assets</p>
-                    <p className="text-sm mt-1">Link secondary assets to this asset</p>
-                    <AssetTreeNode onAddClick={() => setIsLinkAssetModalOpen(true)} isAddButton />
-                  </div>
-                ) : (
-                  <LinkedAssetsTree 
-                    linkedAssets={linkedAssets} 
-                    onAddClick={() => setIsLinkAssetModalOpen(true)}
-                  />
-                )}
-              </TabsContent>
-
-              <TabsContent value="sbom" className="mt-0">
-                {asset?.category !== "hardware" && asset?.category !== "software" ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Package className="w-12 h-12 mb-4 text-gray-300" />
-                    <p className="text-lg">SBOM not applicable</p>
-                    <p className="text-sm mt-1 text-center">
-                      Software Bill of Materials is only available for hardware and software assets
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="text-sm text-gray-500">
-                        {sboms.length} SBOM(s) uploaded
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => setIsConnectModalOpen(true)}
-                        >
-                          <Zap className="w-4 h-4 mr-2" />
-                          Connect
-                        </Button>
-                        <Button
-                          className="bg-[#0066FF] hover:bg-blue-700"
-                          onClick={() => setIsUploadModalOpen(true)}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          Upload SBOM
-                        </Button>
-                      </div>
-                    </div>
-
-                {sboms.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Package className="w-12 h-12 mb-4 text-gray-300" />
-                    <p className="text-lg">No SBOM uploaded</p>
-                    <p className="text-sm mt-1">Upload a CycloneDX or SPDX SBOM for vulnerability scanning</p>
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsConnectModalOpen(true)}
-                      >
-                        <Zap className="w-4 h-4 mr-2" />
-                        Connect
-                      </Button>
-                      <Button
-                        className="bg-[#0066FF]"
-                        onClick={() => setIsUploadModalOpen(true)}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload SBOM
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Link to SBOM Overview */}
-                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
-                      <p className="text-sm text-blue-700">View all SBOMs and vulnerability details</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-blue-600 border-blue-200 hover:bg-blue-100"
-                        onClick={() => router.push("/risks/sbom")}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-1" />
-                        Open SBOM Overview
-                      </Button>
-                    </div>
-                    {sboms.map((sbom) => (
-                      <div
-                        key={sbom.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedSbom?.id === sbom.id ? "border-blue-300 bg-blue-50" : "border-gray-100 hover:border-gray-200"}`}
-                        onClick={async () => {
-                          if (selectedSbom?.id === sbom.id) {
-                            setSelectedSbom(null);
-                            return;
-                          }
-                          try {
-                            const res = await fetch(`/api/sbom/${sbom.id}`);
-                            if (res.ok) {
-                              const data = await res.json();
-                              setSelectedSbom(data);
-                            }
-                          } catch (error) {
-                            console.error("Failed to load SBOM details:", error);
-                          }
-                        }}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded uppercase">
-                                {sbom.format}
-                              </span>
-                              <span className="font-medium text-gray-900">{sbom.versionLabel}</span>
-                              {sbom.isLatest && (
-                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
-                                  Latest
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {isNettoCalc ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Netto berechnet
                                 </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-500 mb-2">
-                              {sbom.componentsCount} components • {new Date(sbom.createdAt).toLocaleDateString()}
-                            </p>
-
-                            {/* Vulnerability Summary */}
-                            <div className="flex items-center gap-2">
-                              {sbom.vulnerabilitySummary.total === 0 ? (
-                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
-                                  No vulnerabilities
+                              ) : rt.v1BruttoScore > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                  <Clock className="h-3 w-3" />
+                                  Nur Brutto
                                 </span>
                               ) : (
-                                <>
-                                  {sbom.vulnerabilitySummary.critical > 0 && (
-                                    <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
-                                      {sbom.vulnerabilitySummary.critical} Critical
-                                    </span>
-                                  )}
-                                  {sbom.vulnerabilitySummary.high > 0 && (
-                                    <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
-                                      {sbom.vulnerabilitySummary.high} High
-                                    </span>
-                                  )}
-                                  {sbom.vulnerabilitySummary.medium > 0 && (
-                                    <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
-                                      {sbom.vulnerabilitySummary.medium} Medium
-                                    </span>
-                                  )}
-                                  {sbom.vulnerabilitySummary.low > 0 && (
-                                    <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                                      {sbom.vulnerabilitySummary.low} Low
-                                    </span>
-                                  )}
-                                </>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                  <Clock className="h-3 w-3" />
+                                  Ausstehend
+                                </span>
                               )}
-                            </div>
-                          </div>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${bruttoLevel.color}`}>
+                                {rt.v1BruttoScore.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {isNettoCalc ? (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${nettoLevel.color}`}>
+                                  {rt.v1NettoScore.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {reduktion !== null ? (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${reduktion}%` }} />
+                                  </div>
+                                  <span className="text-xs font-medium text-emerald-700">-{reduktion}%</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                          <div className="flex items-center gap-2 ml-4">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const response = await fetch(`/api/sbom/${sbom.id}/scan`, {
-                                    method: 'POST',
-                                  });
-                                  if (response.ok) {
-                                    // Refresh SBOM list after scan
-                                    loadSBOMs();
-                                  }
-                                } catch (error) {
-                                  console.error('Failed to trigger scan:', error);
-                                }
-                              }}
-                            >
-                              Scan
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`/api/sbom/${sbom.id}/export`, '_blank');
-                              }}
-                            >
-                              <Download className="w-4 h-4 mr-1" />
-                              Export
-                            </Button>
-                          </div>
+          {/* Linked / SBOM Tabs */}
+          <Card>
+            <CardHeader className="p-0">
+              <div className="flex border-b">
+                <button
+                  onClick={() => setActiveTab("linked")}
+                  className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "linked" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  <Link2 className="h-4 w-4" />
+                  Verknüpfte Assets ({linkedAssets.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("sbom")}
+                  className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "sbom" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  <Package className="h-4 w-4" />
+                  SBOM ({sboms.length})
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {activeTab === "linked" && (
+                <LinkedAssetsList
+                  linkedAssets={linkedAssets}
+                  onAddClick={() => setIsLinkAssetModalOpen(true)}
+                />
+              )}
+
+              {activeTab === "sbom" && (
+                <>
+                  {asset.category !== "hardware" && asset.category !== "software" ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                      <Package className="h-10 w-10 mb-3 text-gray-200" />
+                      <p className="text-sm">SBOM nicht anwendbar</p>
+                      <p className="text-xs mt-1 text-center text-gray-400">
+                        Software Bill of Materials ist nur für Hardware- und Software-Assets verfügbar.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-gray-500">{sboms.length} SBOM(s) hochgeladen</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setIsConnectModalOpen(true)}>
+                            <Zap className="w-4 h-4 mr-1.5" />
+                            Verbinden
+                          </Button>
+                          <Button className="bg-[#0066FF] hover:bg-blue-700" size="sm" onClick={() => setIsUploadModalOpen(true)}>
+                            <Upload className="w-4 h-4 mr-1.5" />
+                            SBOM hochladen
+                          </Button>
                         </div>
                       </div>
-                    ))}
 
-                    {/* SBOM Detail Panel */}
-                    {selectedSbom && (
-                      <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
-                        <div className="bg-blue-50 px-4 py-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-xs bg-white px-2 py-0.5 rounded uppercase border border-blue-200">
-                              {selectedSbom.format}
-                            </span>
-                            <span className="font-medium text-gray-900">{selectedSbom.versionLabel}</span>
-                            <span className="text-sm text-gray-500">{selectedSbom.components.length} components</span>
-                          </div>
-                          <button onClick={() => setSelectedSbom(null)} className="text-gray-400 hover:text-gray-600">
-                            <X className="w-4 h-4" />
-                          </button>
+                      {sboms.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                          <Package className="h-10 w-10 mb-3 text-gray-200" />
+                          <p className="text-sm">Noch keine SBOM hochgeladen</p>
                         </div>
-
-                        {/* Vulnerability Summary */}
-                        {selectedSbom.vulnerabilitySummary.total > 0 && (
-                          <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-3">
-                            <AlertTriangle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm font-medium text-red-700">
-                              {selectedSbom.vulnerabilitySummary.total} vulnerabilities found
-                            </span>
-                            <div className="flex gap-2">
-                              {selectedSbom.vulnerabilitySummary.critical > 0 && <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">{selectedSbom.vulnerabilitySummary.critical} Critical</span>}
-                              {selectedSbom.vulnerabilitySummary.high > 0 && <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">{selectedSbom.vulnerabilitySummary.high} High</span>}
-                              {selectedSbom.vulnerabilitySummary.medium > 0 && <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">{selectedSbom.vulnerabilitySummary.medium} Medium</span>}
-                              {selectedSbom.vulnerabilitySummary.low > 0 && <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">{selectedSbom.vulnerabilitySummary.low} Low</span>}
-                            </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <p className="text-sm text-blue-700">Alle SBOMs und Schwachstellen anzeigen</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-blue-600 border-blue-200 hover:bg-blue-100"
+                              onClick={() => router.push("/risks/sbom")}
+                            >
+                              <ExternalLink className="w-4 h-4 mr-1" />
+                              SBOM-Übersicht
+                            </Button>
                           </div>
-                        )}
-
-                        {/* Component List */}
-                        <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
-                          {selectedSbom.components.map((comp) => (
-                            <div key={comp.id} className="px-4 py-3 flex items-start justify-between">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm text-gray-900">{comp.name}</span>
-                                  {comp.version && <span className="text-xs text-gray-400 font-mono">v{comp.version}</span>}
-                                  {comp.licenseSpdx && <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{comp.licenseSpdx}</span>}
-                                </div>
-                                {comp.vulnerabilities.length > 0 && (
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {comp.vulnerabilities.map((vuln) => (
-                                      <span
-                                        key={vuln.id}
-                                        className={`text-xs px-2 py-0.5 rounded font-mono ${
-                                          vuln.severity === "CRITICAL" ? "bg-red-100 text-red-700" :
-                                          vuln.severity === "HIGH" ? "bg-orange-100 text-orange-700" :
-                                          vuln.severity === "MEDIUM" ? "bg-yellow-100 text-yellow-700" :
-                                          "bg-blue-100 text-blue-700"
-                                        }`}
-                                      >
-                                        {vuln.cveId} · {vuln.severity}{vuln.cvssScore ? ` (${vuln.cvssScore})` : ""}
-                                      </span>
-                                    ))}
+                          {sboms.map((sbom) => (
+                            <div
+                              key={sbom.id}
+                              className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                                selectedSbom?.id === sbom.id ? "border-blue-300 bg-blue-50" : "border-gray-100 hover:border-gray-200"
+                              }`}
+                              onClick={async () => {
+                                if (selectedSbom?.id === sbom.id) { setSelectedSbom(null); return; }
+                                try {
+                                  const res = await fetch(`/api/sbom/${sbom.id}`);
+                                  if (res.ok) setSelectedSbom(await res.json());
+                                } catch (error) { console.error("Failed to load SBOM details:", error); }
+                              }}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded uppercase">{sbom.format}</span>
+                                    <span className="font-medium text-gray-900">{sbom.versionLabel}</span>
+                                    {sbom.isLatest && <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">Aktuell</span>}
                                   </div>
-                                )}
+                                  <p className="text-sm text-gray-500 mb-2">{sbom.componentsCount} Komponenten · {new Date(sbom.createdAt).toLocaleDateString("de-DE")}</p>
+                                  <div className="flex items-center gap-2">
+                                    {sbom.vulnerabilitySummary.total === 0 ? (
+                                      <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">Keine Schwachstellen</span>
+                                    ) : (
+                                      <>
+                                        {sbom.vulnerabilitySummary.critical > 0 && <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">{sbom.vulnerabilitySummary.critical} Kritisch</span>}
+                                        {sbom.vulnerabilitySummary.high > 0 && <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">{sbom.vulnerabilitySummary.high} Hoch</span>}
+                                        {sbom.vulnerabilitySummary.medium > 0 && <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">{sbom.vulnerabilitySummary.medium} Mittel</span>}
+                                        {sbom.vulnerabilitySummary.low > 0 && <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">{sbom.vulnerabilitySummary.low} Niedrig</span>}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 ml-4">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const response = await fetch(`/api/sbom/${sbom.id}/scan`, { method: "POST" });
+                                        if (response.ok) loadSBOMs();
+                                      } catch (error) { console.error("Failed to trigger scan:", error); }
+                                    }}
+                                  >
+                                    Scan
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); window.open(`/api/sbom/${sbom.id}/export`, "_blank"); }}
+                                  >
+                                    <Download className="w-4 h-4 mr-1" />
+                                    Export
+                                  </Button>
+                                </div>
                               </div>
-                              {comp.vulnerabilities.length === 0 && (
-                                <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                              )}
                             </div>
                           ))}
+
+                          {selectedSbom && (
+                            <div className="mt-2 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-4 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded uppercase border border-blue-200">{selectedSbom.format}</span>
+                                  <span className="font-medium text-gray-900">{selectedSbom.versionLabel}</span>
+                                  <span className="text-sm text-gray-500">{selectedSbom.components.length} Komponenten</span>
+                                </div>
+                                <button onClick={() => setSelectedSbom(null)} className="text-gray-400 hover:text-gray-600">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {selectedSbom.vulnerabilitySummary.total > 0 && (
+                                <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-3">
+                                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                                  <span className="text-sm font-medium text-red-700">
+                                    {selectedSbom.vulnerabilitySummary.total} Schwachstellen gefunden
+                                  </span>
+                                </div>
+                              )}
+                              <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                                {selectedSbom.components.map((comp) => (
+                                  <div key={comp.id} className="px-4 py-3 flex items-start justify-between">
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium text-sm text-gray-900">{comp.name}</span>
+                                        {comp.version && <span className="text-xs text-gray-400 font-mono">v{comp.version}</span>}
+                                        {comp.licenseSpdx && <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{comp.licenseSpdx}</span>}
+                                      </div>
+                                      {comp.vulnerabilities.length > 0 && (
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          {comp.vulnerabilities.map((vuln) => (
+                                            <span
+                                              key={vuln.id}
+                                              className={`text-xs px-2 py-0.5 rounded font-mono ${
+                                                vuln.severity === "CRITICAL" ? "bg-red-100 text-red-700" :
+                                                vuln.severity === "HIGH" ? "bg-orange-100 text-orange-700" :
+                                                vuln.severity === "MEDIUM" ? "bg-yellow-100 text-yellow-700" :
+                                                "bg-blue-100 text-blue-700"
+                                              }`}
+                                            >
+                                              {vuln.cveId} · {vuln.severity}{vuln.cvssScore ? ` (${vuln.cvssScore})` : ""}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {comp.vulnerabilities.length === 0 && (
+                                      <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column */}
+        <div className="col-span-5 space-y-6">
+          {/* CIA-Bewertung */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Shield className="h-4 w-4 text-[#0066FF]" />
+                CIA-Bewertung
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Vertraulichkeit */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-gray-500 flex items-center gap-1">
+                    <Lock className="h-3 w-3" />
+                    Vertraulichkeit (1–3)
+                  </Label>
+                  <span className={`text-sm font-bold ${getCIAColor(confidentiality)}`}>
+                    {confidentiality || "—"}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setConfidentiality(v)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        confidentiality === v
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v} – {v === 1 ? "Niedrig" : v === 2 ? "Mittel" : "Hoch"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Integrität */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-gray-500 flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    Integrität (1–3)
+                  </Label>
+                  <span className={`text-sm font-bold ${getCIAColor(integrity)}`}>
+                    {integrity || "—"}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setIntegrity(v)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        integrity === v
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v} – {v === 1 ? "Niedrig" : v === 2 ? "Mittel" : "Hoch"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Verfügbarkeit */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-gray-500 flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    Verfügbarkeit (1–3)
+                  </Label>
+                  <span className={`text-sm font-bold ${getCIAColor(availability)}`}>
+                    {availability || "—"}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setAvailability(v)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        availability === v
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v} – {v === 1 ? "Niedrig" : v === 2 ? "Mittel" : "Hoch"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* CIA Score */}
+              <div className="border-t pt-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">CIA-Score (Ø)</span>
+                <span
+                  className={`rounded-lg px-3 py-1 text-lg font-bold ${getCIAColor(ciaScore)} ${
+                    ciaScore >= 3 ? "bg-red-50" : ciaScore >= 2 ? "bg-orange-50" : ciaScore >= 1 ? "bg-green-50" : "bg-gray-50"
+                  }`}
+                >
+                  {ciaScore > 0 ? ciaScore.toFixed(2) : "—"}
+                </span>
+              </div>
+
+              {/* Protection Need Badge */}
+              {ciaScore > 0 && (
+                <div className={`rounded-lg p-3 text-center text-sm font-medium ${
+                  ciaScore >= 2.34
+                    ? "bg-red-50 text-red-700 border border-red-200"
+                    : ciaScore >= 1.67
+                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                    : "bg-green-50 text-green-700 border border-green-200"
+                }`}>
+                  Schutzbedarf:{" "}
+                  <strong>
+                    {ciaScore >= 2.34 ? "Sehr hoch" : ciaScore >= 1.67 ? "Hoch" : "Normal"}
+                  </strong>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Metadata */}
+          <Card>
+            <CardContent className="pt-4 space-y-2">
+              {[
+                { label: "Erstellt am", value: new Date(asset.createdAt).toLocaleDateString("de-DE") },
+                { label: "Aktualisiert am", value: new Date(asset.updatedAt).toLocaleDateString("de-DE") },
+                { label: "Kategorie", value: CATEGORY_LABELS[asset.category] || asset.category },
+                ...(asset.owner ? [{ label: "Verantwortlich", value: `${asset.owner.firstName} ${asset.owner.lastName}` }] : []),
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">{item.label}</span>
+                  <span className="text-gray-700 font-medium">{item.value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Risk Summary */}
+          {riskThreats.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Risikozusammenfassung</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {riskThreats.slice(0, 5).map((rt) => {
+                  const level = getRiskLevel(Math.round(rt.v1BruttoScore));
+                  return (
+                    <div
+                      key={rt.id}
+                      onClick={() => router.push(`/risks/threats/${rt.id}`)}
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded flex-shrink-0">
+                          {rt.threatScenario.code}
+                        </span>
+                        <span className="text-xs text-gray-700 truncate">{rt.threatScenario.name}</span>
                       </div>
-                    )}
-                  </div>
+                      <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${level.color}`}>
+                        {rt.v1BruttoScore.toFixed(1)}
+                      </span>
+                    </div>
+                  );
+                })}
+                {riskThreats.length > 5 && (
+                  <p className="text-xs text-gray-400 text-center pt-1">
+                    +{riskThreats.length - 5} weitere Szenarien
+                  </p>
                 )}
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
-      {/* Modals */}
-      <CIACalculatorModal
-        isOpen={isCIAModalOpen}
-        onClose={() => setIsCIAModalOpen(false)}
-        asset={asset}
-        onCalculated={loadAsset}
-      />
 
+      {/* Modals */}
       <AddThreatModal
         isOpen={isAddThreatModalOpen}
         onClose={() => setIsAddThreatModalOpen(false)}
@@ -1907,171 +1453,80 @@ export default function AssetDetailPage() {
         onLinked={loadLinkedAssets}
       />
 
-      <RiskCalculationModal
-        isOpen={isRiskCalculationModalOpen}
-        onClose={() => {
-          setIsRiskCalculationModalOpen(false);
-          setEditingRisk(null);
-        }}
-        risk={editingRisk}
-        asset={asset}
-        onCalculated={loadRiskThreats}
-      />
-
-      {/* SBOM Connect / CI Integration Modal */}
-      {isConnectModalOpen && (() => {
-        const assetIdVal = id as string;
-        const apiUrl = typeof window !== "undefined"
-          ? `${window.location.origin}/api/sbom/upload`
-          : "https://your-trustspace.domain/api/sbom/upload";
-
-        const githubSnippet = `name: SBOM Upload to TrustSpace
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  sbom:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - run: npm ci
-
-      - name: Generate SBOM
-        run: npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6
-
-      - name: Upload SBOM to TrustSpace
-        run: |
-          curl -X POST ${apiUrl} \\
-            -F "file=@sbom.json" \\
-            -F "assetId=${assetIdVal}" \\
-            -F "versionLabel=\${{ github.sha }}"`;
-
-        const gitlabSnippet = `sbom-upload:
-  stage: deploy
-  image: node:20
-  script:
-    - npm ci
-    - npx @cyclonedx/cyclonedx-npm --output-format JSON --output-file sbom.json --spec-version 1.6
-    - |
-      curl -X POST ${apiUrl} \\
-        -F "file=@sbom.json" \\
-        -F "assetId=${assetIdVal}" \\
-        -F "versionLabel=$CI_COMMIT_SHA"
-  only:
-    - main`;
-
-        const curlSnippet = `# 1. SBOM generieren (lokal oder in CI)
-npx @cyclonedx/cyclonedx-npm \\
-  --output-format JSON \\
-  --output-file sbom.json \\
-  --spec-version 1.6
-
-# 2. An TrustSpace senden
-curl -X POST ${apiUrl} \\
-  -F "file=@sbom.json" \\
-  -F "assetId=${assetIdVal}" \\
-  -F "versionLabel=1.0.0"`;
-
-        const tabs = [
-          { key: "github" as const, label: "GitHub Actions", snippet: githubSnippet },
-          { key: "gitlab" as const, label: "GitLab CI", snippet: gitlabSnippet },
-          { key: "curl" as const, label: "curl / manuell", snippet: curlSnippet },
-        ];
-        const activeSnippet = tabs.find(t => t.key === connectTab)?.snippet ?? "";
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold">CI/CD Integration</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    Integrieren Sie die SBOM-Generierung in Ihre Pipeline
-                  </p>
-                </div>
-                <button onClick={() => setIsConnectModalOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
+      {/* CI/CD Connect Modal */}
+      {isConnectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">CI/CD Integration</h2>
+                <p className="text-sm text-gray-500 mt-0.5">SBOM-Generierung in Ihre Pipeline integrieren</p>
               </div>
+              <button onClick={() => setIsConnectModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
 
-              {/* Asset ID */}
-              <div className="bg-gray-50 border rounded-lg p-3 mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 mb-0.5">Asset ID (für die API)</p>
-                  <code className="text-sm font-mono text-gray-800">{assetIdVal}</code>
-                </div>
+            <div className="bg-gray-50 border rounded-lg p-3 mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Asset ID (für die API)</p>
+                <code className="text-sm font-mono text-gray-800">{assetIdVal}</code>
+              </div>
+              <button
+                onClick={() => copyToClipboard(assetIdVal, "assetId")}
+                className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1"
+              >
+                {copied === "assetId" ? "Kopiert ✓" : "Kopieren"}
+              </button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-sm text-blue-800">
+              <strong>So funktioniert es:</strong> Ihr CI/CD-System generiert die SBOM und sendet sie per{" "}
+              <code className="bg-blue-100 px-1 rounded text-xs">curl</code> an TrustSpace.
+            </div>
+
+            <div className="flex border-b mb-3">
+              {snippetTabs.map((t) => (
                 <button
-                  onClick={() => copyToClipboard(assetIdVal, "assetId")}
-                  className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1"
+                  key={t.key}
+                  onClick={() => setConnectTab(t.key)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    connectTab === t.key ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
                 >
-                  {copied === "assetId" ? "Kopiert ✓" : "Kopieren"}
+                  {t.label}
                 </button>
-              </div>
+              ))}
+            </div>
 
-              {/* How it works */}
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-sm text-blue-800">
-                <strong>So funktioniert es:</strong> Ihr CI/CD-System generiert die SBOM mit{" "}
-                <code className="bg-blue-100 px-1 rounded text-xs">@cyclonedx/cyclonedx-npm</code> und sendet
-                sie per <code className="bg-blue-100 px-1 rounded text-xs">curl</code> an TrustSpace.
-                Keine Zugangsdaten zu Ihrem Repository nötig.
-              </div>
+            <div className="relative">
+              <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed max-h-64">
+                {activeSnippet}
+              </pre>
+              <button
+                onClick={() => copyToClipboard(activeSnippet, "snippet")}
+                className="absolute top-2 right-2 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded px-2 py-1"
+              >
+                {copied === "snippet" ? "Kopiert ✓" : "Kopieren"}
+              </button>
+            </div>
 
-              {/* Tabs */}
-              <div className="flex border-b mb-3">
-                {tabs.map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => setConnectTab(t.key)}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      connectTab === t.key
-                        ? "border-blue-500 text-blue-600"
-                        : "border-transparent text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Code snippet */}
-              <div className="relative">
-                <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed max-h-64">
-                  {activeSnippet}
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(activeSnippet, "snippet")}
-                  className="absolute top-2 right-2 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded px-2 py-1"
-                >
-                  {copied === "snippet" ? "Kopiert ✓" : "Kopieren"}
-                </button>
-              </div>
-
-              <div className="flex justify-end mt-4">
-                <Button variant="outline" onClick={() => setIsConnectModalOpen(false)}>
-                  Schließen
-                </Button>
-              </div>
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={() => setIsConnectModalOpen(false)}>Schließen</Button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* SBOM Upload Modal */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Upload SBOM</h2>
+              <h2 className="text-lg font-semibold text-gray-900">SBOM hochladen</h2>
               <button
                 onClick={() => setIsUploadModalOpen(false)}
-                className="p-1 hover:bg-gray-100 rounded"
+                className="p-1.5 hover:bg-gray-100 rounded-lg"
                 disabled={uploadLoading}
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -2084,32 +1539,22 @@ curl -X POST ${apiUrl} \\
                 const formData = new FormData(e.currentTarget);
                 const file = formData.get("file") as File;
                 const versionLabel = formData.get("versionLabel") as string;
-
-                if (!file || !versionLabel) {
-                  alert("Please select a file and enter a version label");
-                  return;
-                }
-
+                if (!file || !versionLabel) { alert("Bitte Datei und Versionsbezeichnung eingeben"); return; }
                 setUploadLoading(true);
                 try {
                   formData.append("assetId", id as string);
-
-                  const response = await fetch("/api/sbom/upload", {
-                    method: "POST",
-                    body: formData,
-                  });
-
+                  const response = await fetch("/api/sbom/upload", { method: "POST", body: formData });
                   if (response.ok) {
                     loadSBOMs();
                     setIsUploadModalOpen(false);
                     setActiveTab("sbom");
                   } else {
                     const error = await response.json();
-                    alert(`Upload failed: ${error.error}`);
+                    alert(`Upload fehlgeschlagen: ${error.error}`);
                   }
                 } catch (error) {
                   console.error("Upload failed:", error);
-                  alert("Upload failed");
+                  alert("Upload fehlgeschlagen");
                 } finally {
                   setUploadLoading(false);
                 }
@@ -2117,50 +1562,32 @@ curl -X POST ${apiUrl} \\
               className="space-y-4"
             >
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-2">
-                  Version Label
-                </label>
+                <Label className="text-sm font-medium text-gray-700 block mb-2">Versionsbezeichnung</Label>
                 <input
                   type="text"
                   name="versionLabel"
-                  placeholder="e.g., v1.0.0"
+                  placeholder="z.B. v1.0.0"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
-
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-2">
-                  SBOM File (JSON)
-                </label>
+                <Label className="text-sm font-medium text-gray-700 block mb-2">SBOM-Datei (JSON)</Label>
                 <input
                   type="file"
                   name="file"
                   accept=".json"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Supports CycloneDX and SPDX JSON formats
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Unterstützt CycloneDX und SPDX JSON</p>
               </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsUploadModalOpen(false)}
-                  className="flex-1"
-                  disabled={uploadLoading}
-                >
-                  Cancel
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsUploadModalOpen(false)} className="flex-1" disabled={uploadLoading}>
+                  Abbrechen
                 </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-[#0066FF] hover:bg-blue-700"
-                  disabled={uploadLoading}
-                >
-                  {uploadLoading ? "Uploading..." : "Upload & Scan"}
+                <Button type="submit" className="flex-1 bg-[#0066FF] hover:bg-blue-700" disabled={uploadLoading}>
+                  {uploadLoading ? "Hochladen..." : "Hochladen & Scannen"}
                 </Button>
               </div>
             </form>

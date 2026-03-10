@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -57,6 +57,7 @@ const THREAT_SOURCE_OPTIONS = [
 
 export default function NewRiskV2Page() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [creating, setCreating] = useState(false);
   const [assets, setAssets] = useState<AssetOption[]>([]);
@@ -65,7 +66,7 @@ export default function NewRiskV2Page() {
   // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assetId, setAssetId] = useState<string>("");
+  const [assetId, setAssetId] = useState<string>(searchParams.get("assetId") || "");
   const [riskCategory, setRiskCategory] = useState("operational");
   const [threatSource, setThreatSource] = useState("external");
   const [vulnerability, setVulnerability] = useState("");

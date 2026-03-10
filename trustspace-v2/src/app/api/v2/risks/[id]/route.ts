@@ -59,38 +59,47 @@ export async function PUT(
       return NextResponse.json({ error: "Risk not found" }, { status: 404 });
     }
 
-    // Brutto-Scores neu berechnen
-    const bruttoProbability = data.bruttoProbability ?? existing.bruttoProbability;
-    const bruttoImpact = data.bruttoImpact ?? existing.bruttoImpact;
-    const bruttoScore = bruttoProbability * bruttoImpact;
+    // Fetch asset CIA (capped 1-3)
+    const assetId = data.assetId ?? existing.assetId;
+    let ciaScore = 1;
+    if (assetId) {
+      const assetData = await prisma.assetV2.findUnique({
+        where: { id: assetId },
+        select: { ciaScore: true },
+      });
+      ciaScore = Math.max(1, Math.min(3, Math.round(assetData?.ciaScore ?? 1)));
+    }
 
-    // ALE-Werte neu berechnen (FAIR)
-    const singleLossExpectancy =
-      data.singleLossExpectancy ?? existing.singleLossExpectancy;
-    const annualRateOccurrence =
-      data.annualRateOccurrence ?? existing.annualRateOccurrence;
-    const annualLossExpectancy =
+    // New formula: CIA × SLE × ARO
+    const singleLossExpectancy = data.singleLossExpectancy ?? existing.singleLossExpectancy;
+    const annualRateOccurrence = data.annualRateOccurrence ?? existing.annualRateOccurrence;
+    const bruttoScore =
       singleLossExpectancy != null && annualRateOccurrence != null
-        ? singleLossExpectancy * annualRateOccurrence
-        : null;
+        ? parseFloat((ciaScore * singleLossExpectancy * annualRateOccurrence).toFixed(2))
+        : existing.bruttoScore;
+    const annualLossExpectancy = bruttoScore;
 
-    // Netto-Scores neu berechnen
-    const nettoProbability = data.nettoProbability ?? existing.nettoProbability;
-    const nettoImpact = data.nettoImpact ?? existing.nettoImpact;
-    const nettoScore = nettoProbability * nettoImpact;
-
-    // Netto ALE
+    // Netto: CIA × NettoSLE × NettoARO
     const nettoSLE = data.nettoSLE ?? existing.nettoSLE;
     const nettoARO = data.nettoARO ?? existing.nettoARO;
-    const nettoALE =
-      nettoSLE != null && nettoARO != null ? nettoSLE * nettoARO : null;
+    const nettoScore =
+      nettoSLE != null && nettoARO != null
+        ? parseFloat((ciaScore * nettoSLE * nettoARO).toFixed(2))
+        : existing.nettoScore;
+    const nettoALE = nettoScore;
+
+    // Passthrough probability/impact (keep for schema compatibility)
+    const bruttoProbability = data.bruttoProbability ?? existing.bruttoProbability;
+    const bruttoImpact = data.bruttoImpact ?? existing.bruttoImpact;
+    const nettoProbability = data.nettoProbability ?? existing.nettoProbability;
+    const nettoImpact = data.nettoImpact ?? existing.nettoImpact;
 
     const updated = await prisma.riskV2.update({
       where: { id },
       data: {
         title: data.title ?? existing.title,
         description: data.description ?? existing.description,
-        assetId: data.assetId ?? existing.assetId,
+        assetId,
         riskCategory: data.riskCategory ?? existing.riskCategory,
         threatSource: data.threatSource ?? existing.threatSource,
         vulnerability: data.vulnerability ?? existing.vulnerability,
@@ -120,11 +129,7 @@ export async function PUT(
       },
       include: {
         asset: {
-          select: {
-            id: true,
-            name: true,
-            category: true,
-          },
+          select: { id: true, name: true, category: true, ciaScore: true },
         },
       },
     });

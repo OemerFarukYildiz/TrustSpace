@@ -37,14 +37,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  cn,
-  formatEUR,
-  getRiskLevelV2,
-  getRiskScoreV2,
-  calculateALE,
-  formatDate,
-} from "@/lib/utils";
+import { cn, formatEUR, formatDate } from "@/lib/utils";
 
 // ──────────────────────────────────────────────
 // Types
@@ -98,36 +91,6 @@ interface ControlItem {
 }
 
 // ──────────────────────────────────────────────
-// FAIR Methodology Scales
-// ──────────────────────────────────────────────
-
-const PROB_SCALE: { value: number; label: string; aro: number; desc: string }[] = [
-  { value: 1, label: "1", aro: 0.01, desc: "Extrem selten — alle 100 Jahre" },
-  { value: 2, label: "2", aro: 0.02, desc: "Sehr selten — alle 50 Jahre" },
-  { value: 3, label: "3", aro: 0.05, desc: "Selten — alle 20 Jahre" },
-  { value: 4, label: "4", aro: 0.1, desc: "Unwahrscheinlich — alle 10 Jahre" },
-  { value: 5, label: "5", aro: 0.2, desc: "Möglich — alle 5 Jahre" },
-  { value: 6, label: "6", aro: 0.5, desc: "Wahrscheinlich — alle 2 Jahre" },
-  { value: 7, label: "7", aro: 1, desc: "Häufig — 1x pro Jahr" },
-  { value: 8, label: "8", aro: 2, desc: "Sehr häufig — 2x pro Jahr" },
-  { value: 9, label: "9", aro: 5, desc: "Regelmäßig — 5x pro Jahr" },
-  { value: 10, label: "10", aro: 12, desc: "Ständig — monatlich" },
-];
-
-const IMPACT_SCALE: { value: number; label: string; sle: number; desc: string }[] = [
-  { value: 1, label: "1", sle: 1000, desc: "Minimal — bis 1.000 €" },
-  { value: 2, label: "2", sle: 5000, desc: "Sehr gering — bis 5.000 €" },
-  { value: 3, label: "3", sle: 10000, desc: "Gering — bis 10.000 €" },
-  { value: 4, label: "4", sle: 25000, desc: "Moderat — bis 25.000 €" },
-  { value: 5, label: "5", sle: 50000, desc: "Erheblich — bis 50.000 €" },
-  { value: 6, label: "6", sle: 100000, desc: "Signifikant — bis 100.000 €" },
-  { value: 7, label: "7", sle: 250000, desc: "Hoch — bis 250.000 €" },
-  { value: 8, label: "8", sle: 500000, desc: "Sehr hoch — bis 500.000 €" },
-  { value: 9, label: "9", sle: 1000000, desc: "Kritisch — bis 1.000.000 €" },
-  { value: 10, label: "10", sle: 5000000, desc: "Katastrophal — über 1.000.000 €" },
-];
-
-// ──────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────
 
@@ -160,245 +123,6 @@ const TREATMENT_OPTIONS = [
   { value: "avoid", label: "Vermeiden" },
   { value: "accept", label: "Akzeptieren" },
 ];
-
-function getScoreColor(score: number): string {
-  if (score >= 70) return "bg-red-500";
-  if (score >= 50) return "bg-orange-500";
-  if (score >= 25) return "bg-amber-400";
-  if (score >= 10) return "bg-yellow-300";
-  return "bg-green-300";
-}
-
-function getScoreBgLight(score: number): string {
-  if (score >= 70) return "bg-red-50 border-red-200";
-  if (score >= 50) return "bg-orange-50 border-orange-200";
-  if (score >= 25) return "bg-amber-50 border-amber-200";
-  if (score >= 10) return "bg-yellow-50 border-yellow-200";
-  return "bg-green-50 border-green-200";
-}
-
-// ──────────────────────────────────────────────
-// Scale Button Grid
-// ──────────────────────────────────────────────
-
-function ScaleButtonGrid({
-  value,
-  onChange,
-  scale,
-  variant = "default",
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  scale: { value: number; label: string; desc: string }[];
-  variant?: "default" | "brutto" | "netto";
-}) {
-  const [hoveredValue, setHoveredValue] = useState<number | null>(null);
-  const activeDesc =
-    hoveredValue != null
-      ? scale.find((s) => s.value === hoveredValue)?.desc
-      : scale.find((s) => s.value === value)?.desc;
-
-  const getButtonColor = (v: number, isActive: boolean) => {
-    if (!isActive) return "bg-gray-50 text-gray-400 hover:bg-gray-100 border-gray-200";
-    if (variant === "netto") {
-      if (v >= 8) return "bg-emerald-600 text-white border-emerald-700";
-      if (v >= 5) return "bg-emerald-500 text-white border-emerald-600";
-      return "bg-emerald-400 text-white border-emerald-500";
-    }
-    // brutto / default
-    if (v >= 8) return "bg-red-600 text-white border-red-700";
-    if (v >= 6) return "bg-orange-500 text-white border-orange-600";
-    if (v >= 4) return "bg-amber-500 text-white border-amber-600";
-    return "bg-yellow-400 text-gray-900 border-yellow-500";
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex gap-1">
-        {scale.map((s) => (
-          <button
-            key={s.value}
-            type="button"
-            onClick={() => onChange(s.value)}
-            onMouseEnter={() => setHoveredValue(s.value)}
-            onMouseLeave={() => setHoveredValue(null)}
-            className={cn(
-              "flex-1 h-9 rounded-md border text-xs font-bold transition-all",
-              getButtonColor(s.value, s.value <= value)
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-      {activeDesc && (
-        <p className="text-[11px] text-gray-500 pl-0.5">{activeDesc}</p>
-      )}
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────
-// FAIR Risk Assessment Card (Brutto / Netto)
-// ──────────────────────────────────────────────
-
-function FairAssessmentCard({
-  title,
-  variant,
-  probability,
-  impact,
-  sle,
-  aro,
-  onProbabilityChange,
-  onImpactChange,
-  onSLEChange,
-  onAROChange,
-}: {
-  title: string;
-  variant: "brutto" | "netto";
-  probability: number;
-  impact: number;
-  sle: number | null;
-  aro: number | null;
-  onProbabilityChange: (v: number) => void;
-  onImpactChange: (v: number) => void;
-  onSLEChange: (v: number | null) => void;
-  onAROChange: (v: number | null) => void;
-}) {
-  const score = getRiskScoreV2(probability, impact);
-  const level = getRiskLevelV2(score);
-  const ale = calculateALE(sle, aro);
-
-  const headerColor =
-    variant === "brutto"
-      ? "from-red-50 to-white border-red-100"
-      : "from-emerald-50 to-white border-emerald-100";
-
-  // Auto-set SLE/ARO from scale when user clicks buttons
-  const handleProbChange = (v: number) => {
-    onProbabilityChange(v);
-    const scaleItem = PROB_SCALE.find((s) => s.value === v);
-    if (scaleItem) onAROChange(scaleItem.aro);
-  };
-
-  const handleImpactChange = (v: number) => {
-    onImpactChange(v);
-    const scaleItem = IMPACT_SCALE.find((s) => s.value === v);
-    if (scaleItem) onSLEChange(scaleItem.sle);
-  };
-
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader
-        className={cn("pb-3 bg-gradient-to-b border-b", headerColor)}
-      >
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold">{title}</CardTitle>
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-bold",
-                level.color
-              )}
-            >
-              {score}
-            </span>
-            <span className="text-xs text-gray-500">{level.label}</span>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-4">
-        {/* Probability Scale */}
-        <div>
-          <Label className="text-xs text-gray-500 mb-1.5 block">
-            Wahrscheinlichkeit (1-10)
-          </Label>
-          <ScaleButtonGrid
-            value={probability}
-            onChange={handleProbChange}
-            scale={PROB_SCALE}
-            variant={variant}
-          />
-        </div>
-
-        {/* Impact Scale */}
-        <div>
-          <Label className="text-xs text-gray-500 mb-1.5 block">
-            Auswirkung (1-10)
-          </Label>
-          <ScaleButtonGrid
-            value={impact}
-            onChange={handleImpactChange}
-            scale={IMPACT_SCALE}
-            variant={variant}
-          />
-        </div>
-
-        {/* FAIR Values */}
-        <div className="border-t pt-3 space-y-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-            FAIR-Bewertung
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[10px] text-gray-500">SLE (€)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={sle ?? ""}
-                onChange={(e) =>
-                  onSLEChange(
-                    e.target.value === "" ? null : parseFloat(e.target.value)
-                  )
-                }
-                placeholder="Schadenshöhe"
-                className="mt-0.5 h-8 text-xs"
-              />
-            </div>
-            <div>
-              <Label className="text-[10px] text-gray-500">
-                ARO (Häufigkeit/Jahr)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                step={0.01}
-                value={aro ?? ""}
-                onChange={(e) =>
-                  onAROChange(
-                    e.target.value === "" ? null : parseFloat(e.target.value)
-                  )
-                }
-                placeholder="z.B. 0.5"
-                className="mt-0.5 h-8 text-xs"
-              />
-            </div>
-          </div>
-          <div
-            className={cn(
-              "flex items-center justify-between rounded-lg p-3 border",
-              variant === "brutto"
-                ? "bg-red-50 border-red-100"
-                : "bg-emerald-50 border-emerald-100"
-            )}
-          >
-            <span className="text-xs font-medium text-gray-600">
-              ALE (€/Jahr)
-            </span>
-            <span
-              className={cn(
-                "text-sm font-bold",
-                variant === "brutto" ? "text-red-700" : "text-emerald-700"
-              )}
-            >
-              {ale != null ? formatEUR(ale) : "—"}
-            </span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ──────────────────────────────────────────────
 // Control Mapping Modal
@@ -614,45 +338,42 @@ export default function RiskV2DetailPage() {
   const [riskTreatment, setRiskTreatment] = useState("mitigate");
   const [status, setStatus] = useState("identified");
 
-  // Brutto assessment
-  const [bruttoProbability, setBruttoProbability] = useState(1);
-  const [bruttoImpact, setBruttoImpact] = useState(1);
-  const [bruttoSLE, setBruttoSLE] = useState<number | null>(null);
-  const [bruttoARO, setBruttoARO] = useState<number | null>(null);
-
-  // Netto assessment
-  const [nettoProbability, setNettoProbability] = useState(1);
-  const [nettoImpact, setNettoImpact] = useState(1);
-  const [nettoSLE, setNettoSLE] = useState<number | null>(null);
-  const [nettoARO, setNettoARO] = useState<number | null>(null);
+  // Calculation state
+  const [sle, setSle] = useState<string>("");
+  const [aro, setAro] = useState<string>("");
+  const [nettoSle, setNettoSle] = useState<string>("");
+  const [nettoAro, setNettoAro] = useState<string>("");
 
   // Mapped controls
   const [mappedControls, setMappedControls] = useState<string[]>([]);
 
-  // Computed
-  const bruttoScore = useMemo(
-    () => getRiskScoreV2(bruttoProbability, bruttoImpact),
-    [bruttoProbability, bruttoImpact]
-  );
-  const nettoScore = useMemo(
-    () => getRiskScoreV2(nettoProbability, nettoImpact),
-    [nettoProbability, nettoImpact]
-  );
-  const bruttoALE = useMemo(
-    () => calculateALE(bruttoSLE, bruttoARO),
-    [bruttoSLE, bruttoARO]
-  );
-  const nettoALE = useMemo(
-    () => calculateALE(nettoSLE, nettoARO),
-    [nettoSLE, nettoARO]
-  );
-  const scoreReduction = bruttoScore - nettoScore;
-  const aleReduction =
-    bruttoALE != null && nettoALE != null ? bruttoALE - nettoALE : null;
-  const reductionPct =
-    bruttoALE != null && bruttoALE > 0 && nettoALE != null
-      ? Math.round(((bruttoALE - nettoALE) / bruttoALE) * 100)
-      : null;
+  // Derived CIA from asset (capped 1-3)
+  const cia = useMemo(() => {
+    if (!risk?.asset?.ciaScore) return 1;
+    return Math.max(1, Math.min(3, Math.round(risk.asset.ciaScore)));
+  }, [risk]);
+
+  // Computed ALE values
+  const bruttoALE = useMemo(() => {
+    const s = parseFloat(sle);
+    const a = parseFloat(aro);
+    if (s > 0 && a > 0) return parseFloat((cia * s * a).toFixed(2));
+    return null;
+  }, [cia, sle, aro]);
+
+  const nettoALE = useMemo(() => {
+    const s = parseFloat(nettoSle);
+    const a = parseFloat(nettoAro);
+    if (s > 0 && a > 0) return parseFloat((cia * s * a).toFixed(2));
+    return null;
+  }, [cia, nettoSle, nettoAro]);
+
+  const reductionPct = useMemo(() => {
+    if (bruttoALE && nettoALE && bruttoALE > 0) {
+      return Math.round(((bruttoALE - nettoALE) / bruttoALE) * 100);
+    }
+    return null;
+  }, [bruttoALE, nettoALE]);
 
   // Fetch risk
   useEffect(() => {
@@ -686,15 +407,10 @@ export default function RiskV2DetailPage() {
         setRiskTreatment(data.riskTreatment);
         setStatus(data.status);
 
-        setBruttoProbability(data.bruttoProbability);
-        setBruttoImpact(data.bruttoImpact);
-        setBruttoSLE(data.singleLossExpectancy);
-        setBruttoARO(data.annualRateOccurrence);
-
-        setNettoProbability(data.nettoProbability);
-        setNettoImpact(data.nettoImpact);
-        setNettoSLE(data.nettoSLE);
-        setNettoARO(data.nettoARO);
+        setSle(data.singleLossExpectancy != null ? String(data.singleLossExpectancy) : "");
+        setAro(data.annualRateOccurrence != null ? String(data.annualRateOccurrence) : "");
+        setNettoSle(data.nettoSLE != null ? String(data.nettoSLE) : "");
+        setNettoAro(data.nettoARO != null ? String(data.nettoARO) : "");
 
         // Parse mapped controls
         try {
@@ -732,14 +448,10 @@ export default function RiskV2DetailPage() {
           treatmentDeadline: treatmentDeadline || null,
           riskTreatment,
           status,
-          bruttoProbability,
-          bruttoImpact,
-          singleLossExpectancy: bruttoSLE,
-          annualRateOccurrence: bruttoARO,
-          nettoProbability,
-          nettoImpact,
-          nettoSLE,
-          nettoARO,
+          singleLossExpectancy: sle ? parseFloat(sle) : null,
+          annualRateOccurrence: aro ? parseFloat(aro) : null,
+          nettoSLE: nettoSle ? parseFloat(nettoSle) : null,
+          nettoARO: nettoAro ? parseFloat(nettoAro) : null,
           mappedControls,
         }),
       });
@@ -769,12 +481,10 @@ export default function RiskV2DetailPage() {
     }
   };
 
-  // Remove a control from the mapped list
   const removeControl = (code: string) => {
     setMappedControls((prev) => prev.filter((c) => c !== code));
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -783,7 +493,6 @@ export default function RiskV2DetailPage() {
     );
   }
 
-  // Error state
   if (error || !risk) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3">
@@ -807,10 +516,7 @@ export default function RiskV2DetailPage() {
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link
-          href="/risks-v2"
-          className="hover:text-gray-700 transition-colors"
-        >
+        <Link href="/risks-v2" className="hover:text-gray-700 transition-colors">
           Risks & Assets v2
         </Link>
         <ChevronRight className="h-4 w-4" />
@@ -821,11 +527,7 @@ export default function RiskV2DetailPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/risks-v2")}
-        >
+        <Button variant="ghost" size="sm" onClick={() => router.push("/risks-v2")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Zurück
         </Button>
@@ -866,9 +568,7 @@ export default function RiskV2DetailPage() {
           {/* Basic Info Card */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">
-                Risikodetails
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold">Risikodetails</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -894,13 +594,8 @@ export default function RiskV2DetailPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-xs text-gray-500">
-                    Risikokategorie
-                  </Label>
-                  <Select
-                    value={riskCategory}
-                    onValueChange={setRiskCategory}
-                  >
+                  <Label className="text-xs text-gray-500">Risikokategorie</Label>
+                  <Select value={riskCategory} onValueChange={setRiskCategory}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -914,13 +609,8 @@ export default function RiskV2DetailPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">
-                    Bedrohungsquelle
-                  </Label>
-                  <Select
-                    value={threatSource}
-                    onValueChange={setThreatSource}
-                  >
+                  <Label className="text-xs text-gray-500">Bedrohungsquelle</Label>
+                  <Select value={threatSource} onValueChange={setThreatSource}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -951,20 +641,13 @@ export default function RiskV2DetailPage() {
           {/* Treatment Card */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">
-                Risikobehandlung
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold">Risikobehandlung</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-xs text-gray-500">
-                    Behandlungsstrategie
-                  </Label>
-                  <Select
-                    value={riskTreatment}
-                    onValueChange={setRiskTreatment}
-                  >
+                  <Label className="text-xs text-gray-500">Behandlungsstrategie</Label>
+                  <Select value={riskTreatment} onValueChange={setRiskTreatment}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -995,9 +678,7 @@ export default function RiskV2DetailPage() {
               </div>
 
               <div>
-                <Label className="text-xs text-gray-500">
-                  Behandlungsplan
-                </Label>
+                <Label className="text-xs text-gray-500">Behandlungsplan</Label>
                 <Textarea
                   value={treatmentPlan}
                   onChange={(e) => setTreatmentPlan(e.target.value)}
@@ -1008,9 +689,7 @@ export default function RiskV2DetailPage() {
               </div>
 
               <div>
-                <Label className="text-xs text-gray-500">
-                  Behandlungsfrist
-                </Label>
+                <Label className="text-xs text-gray-500">Behandlungsfrist</Label>
                 <Input
                   type="date"
                   value={treatmentDeadline}
@@ -1021,7 +700,7 @@ export default function RiskV2DetailPage() {
             </CardContent>
           </Card>
 
-          {/* Mapped Controls (SOA Maßnahmen) */}
+          {/* Mapped Controls */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -1078,9 +757,7 @@ export default function RiskV2DetailPage() {
           {risk.asset && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">
-                  Zugeordnetes Asset
-                </CardTitle>
+                <CardTitle className="text-sm font-semibold">Zugeordnetes Asset</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
@@ -1089,10 +766,7 @@ export default function RiskV2DetailPage() {
                       {risk.asset.name}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {risk.asset.category} | CIA Score:{" "}
-                      {risk.asset.ciaScore?.toFixed(1)} (C:
-                      {risk.asset.confidentiality} I:{risk.asset.integrity} A:
-                      {risk.asset.availability})
+                      {risk.asset.category} · CIA Score: {risk.asset.ciaScore?.toFixed(1)} (C:{risk.asset.confidentiality} I:{risk.asset.integrity} A:{risk.asset.availability})
                     </p>
                   </div>
                   <Link href={`/risks-v2/assets/${risk.asset.id}`}>
@@ -1107,173 +781,184 @@ export default function RiskV2DetailPage() {
           )}
         </div>
 
-        {/* Right Column */}
-        <div className="col-span-5 space-y-6">
-          {/* Brutto Assessment */}
-          <FairAssessmentCard
-            title="Brutto-Risiko (Inherent Risk)"
-            variant="brutto"
-            probability={bruttoProbability}
-            impact={bruttoImpact}
-            sle={bruttoSLE}
-            aro={bruttoARO}
-            onProbabilityChange={setBruttoProbability}
-            onImpactChange={setBruttoImpact}
-            onSLEChange={setBruttoSLE}
-            onAROChange={setBruttoARO}
-          />
-
-          {/* Netto Assessment */}
-          <FairAssessmentCard
-            title="Netto-Risiko (Residual Risk)"
-            variant="netto"
-            probability={nettoProbability}
-            impact={nettoImpact}
-            sle={nettoSLE}
-            aro={nettoARO}
-            onProbabilityChange={setNettoProbability}
-            onImpactChange={setNettoImpact}
-            onSLEChange={setNettoSLE}
-            onAROChange={setNettoARO}
-          />
-
-          {/* Reduction Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-green-600" />
-                Risikoreduktion
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Score comparison */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
-                    Brutto
+        {/* Right Column — Risikoberechnung */}
+        <div className="col-span-5 space-y-4">
+          {/* CIA Card (read-only from asset) */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                    Schutzbedarf (CIA)
                   </p>
-                  <div
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-center border",
-                      getScoreBgLight(bruttoScore)
-                    )}
-                  >
-                    <span className="text-lg font-bold text-gray-900">
-                      {bruttoScore}
-                    </span>
-                    <p className="text-[10px] text-gray-500">
-                      {getRiskLevelV2(bruttoScore).label}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-col items-center pt-4">
-                  <TrendingDown
-                    className={cn(
-                      "h-5 w-5",
-                      scoreReduction > 0 ? "text-green-500" : "text-gray-300"
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "text-xs font-bold mt-0.5",
-                      scoreReduction > 0
-                        ? "text-green-600"
-                        : scoreReduction < 0
-                        ? "text-red-600"
-                        : "text-gray-400"
-                    )}
-                  >
-                    {scoreReduction > 0 ? `-${scoreReduction}` : scoreReduction}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
-                    Netto
+                  <p className="text-xs text-blue-500 mt-0.5">
+                    Vom verknüpften Asset · Skala 1–3
                   </p>
-                  <div
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-center border",
-                      getScoreBgLight(nettoScore)
-                    )}
-                  >
-                    <span className="text-lg font-bold text-gray-900">
-                      {nettoScore}
-                    </span>
-                    <p className="text-[10px] text-gray-500">
-                      {getRiskLevelV2(nettoScore).label}
-                    </p>
-                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-blue-700">{cia}</p>
+                  <p className="text-xs text-blue-500">
+                    {cia === 3 ? "Sehr hoch" : cia === 2 ? "Hoch" : "Normal"}
+                  </p>
                 </div>
               </div>
-
-              {/* ALE comparison */}
-              {(bruttoALE != null || nettoALE != null) && (
-                <div className="border-t pt-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Brutto-ALE</span>
-                    <span className="text-xs font-semibold text-red-600">
-                      {formatEUR(bruttoALE)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Netto-ALE</span>
-                    <span className="text-xs font-semibold text-emerald-600">
-                      {formatEUR(nettoALE)}
-                    </span>
-                  </div>
-                  {aleReduction != null && (
-                    <div className="flex items-center justify-between border-t pt-2">
-                      <span className="text-xs font-medium text-gray-700">
-                        Einsparung
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {reductionPct != null && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px]",
-                              reductionPct > 0
-                                ? "bg-green-50 text-green-700 border-green-200"
-                                : "bg-gray-50 text-gray-500 border-gray-200"
-                            )}
-                          >
-                            {reductionPct > 0 ? `-${reductionPct}%` : `${reductionPct}%`}
-                          </Badge>
-                        )}
-                        <span
-                          className={cn(
-                            "text-sm font-bold",
-                            aleReduction > 0
-                              ? "text-green-600"
-                              : aleReduction < 0
-                              ? "text-red-600"
-                              : "text-gray-400"
-                          )}
-                        >
-                          {formatEUR(Math.abs(aleReduction))}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {!risk.asset && (
+                <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  Kein Asset verknüpft — CIA = 1 (Standard)
+                </p>
               )}
             </CardContent>
           </Card>
+
+          {/* Bruttorisiko */}
+          <Card>
+            <CardHeader className="pb-3 bg-gradient-to-b from-red-50 to-white border-b border-red-100">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Brutto-Risiko</CardTitle>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-red-600">
+                    {bruttoALE != null ? formatEUR(bruttoALE) : "—"}
+                  </p>
+                  <p className="text-[10px] text-gray-400">Brutto-ALE/Jahr</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-[10px] text-gray-500">Schadenshöhe / SLE (€)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={sle}
+                    onChange={(e) => setSle(e.target.value)}
+                    placeholder="z.B. 50000"
+                    className="mt-0.5 h-8 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-gray-500">Eintrittshäufigkeit / ARO</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={aro}
+                    onChange={(e) => setAro(e.target.value)}
+                    placeholder="z.B. 0.1 = 1×/10J"
+                    className="mt-0.5 h-8 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg bg-red-50 border border-red-100 p-3">
+                <p className="text-[10px] text-gray-400 mb-1">
+                  CIA ({cia}) × SLE ({sle || "—"}) × ARO ({aro || "—"}) =
+                </p>
+                <p className="text-lg font-bold text-red-600">
+                  {bruttoALE != null ? formatEUR(bruttoALE) : "—"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nettorisiko */}
+          <Card>
+            <CardHeader className="pb-3 bg-gradient-to-b from-emerald-50 to-white border-b border-emerald-100">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Netto-Risiko</CardTitle>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-emerald-600">
+                    {nettoALE != null ? formatEUR(nettoALE) : "—"}
+                  </p>
+                  <p className="text-[10px] text-gray-400">Netto-ALE/Jahr</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-[10px] text-gray-500">Netto Schadenshöhe / SLE (€)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={nettoSle}
+                    onChange={(e) => setNettoSle(e.target.value)}
+                    placeholder="z.B. 20000"
+                    className="mt-0.5 h-8 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-gray-500">Netto ARO</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={nettoAro}
+                    onChange={(e) => setNettoAro(e.target.value)}
+                    placeholder="z.B. 0.05"
+                    className="mt-0.5 h-8 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3">
+                <p className="text-[10px] text-gray-400 mb-1">
+                  CIA ({cia}) × Netto-SLE ({nettoSle || "—"}) × Netto-ARO ({nettoAro || "—"}) =
+                </p>
+                <p className="text-lg font-bold text-emerald-600">
+                  {nettoALE != null ? formatEUR(nettoALE) : "—"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Risikoreduktion */}
+          {bruttoALE != null && nettoALE != null && bruttoALE > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-green-600" />
+                  Risikoreduktion
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Brutto-ALE</span>
+                  <span className="font-semibold text-red-600">{formatEUR(bruttoALE)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Netto-ALE</span>
+                  <span className="font-semibold text-emerald-600">{formatEUR(nettoALE)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-xs font-medium text-gray-700">Einsparung</span>
+                  <div className="flex items-center gap-2">
+                    {reductionPct != null && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-green-50 text-green-700 border-green-200"
+                      >
+                        -{reductionPct}%
+                      </Badge>
+                    )}
+                    <span className="text-sm font-bold text-green-600">
+                      {formatEUR(bruttoALE - nettoALE)}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Meta Info */}
           <Card>
             <CardContent className="pt-4 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Erstellt am</span>
-                <span className="text-gray-700">
-                  {formatDate(risk.createdAt)}
-                </span>
+                <span className="text-gray-700">{formatDate(risk.createdAt)}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Aktualisiert am</span>
-                <span className="text-gray-700">
-                  {formatDate(risk.updatedAt)}
-                </span>
+                <span className="text-gray-700">{formatDate(risk.updatedAt)}</span>
               </div>
             </CardContent>
           </Card>

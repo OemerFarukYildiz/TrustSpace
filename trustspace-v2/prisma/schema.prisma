@@ -110,20 +110,40 @@ model RiskThreat {
   organizationId    String
   assetId           String
   threatId          String
-  
-  // Brutto-Risiko
+
+  // Brutto-Risiko (Legacy 1-5 Skala)
   bruttoProbability Int      @default(1) // 1-5
   bruttoImpact      Int      @default(1) // 1-5
   bruttoScore       Int      @default(1)
-  
-  // Netto-Risiko (nach Maßnahmen)
+
+  // Netto-Risiko (Legacy 1-5 Skala)
   nettoProbability  Int      @default(1)
   nettoImpact       Int      @default(1)
   nettoScore        Int      @default(1)
-  
+
+  // V1: Schutzbedarf × Schaden × Wahrscheinlichkeit
+  schadenStufe              Int      @default(1) // 1-4
+  wahrscheinlichkeitStufe   Int      @default(1) // 1-4
+  nettoSchadenStufe         Int      @default(1) // 1-4
+  nettoWahrscheinlichkeitStufe Int   @default(1) // 1-4
+  schadenInEuro             Float?   // optionaler monetärer Schaden
+
+  // V2: BSI Schadensklassen-Methodik
+  schadenklasse             Int?     // 1-4 BSI Schadensklasse
+  wahrscheinlichkeitV2      Float?   // 1-10 Eintrittshäufigkeit
+  nettoSchadenklasse        Int?     // Netto Schadensklasse
+  nettoWahrscheinlichkeitV2 Float?   // Netto Eintrittshäufigkeit
+
   // Controls die diesem Threat gemappt sind
   mappedControls    String?  // JSON array of control IDs
-  
+
+  // Risikobehandlung
+  riskTreatment     String?   // mitigate, transfer, avoid, accept
+  status            String?   // identified, assessed, treated, accepted, closed
+  treatmentPlan     String?
+  treatmentDeadline DateTime?
+  riskOwner         String?
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

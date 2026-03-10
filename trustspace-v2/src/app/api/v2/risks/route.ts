@@ -55,25 +55,38 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
 
-    const bruttoProbability = data.bruttoProbability || 1;
-    const bruttoImpact = data.bruttoImpact || 1;
-    const bruttoScore = bruttoProbability * bruttoImpact;
+    // Fetch asset CIA (capped 1-3)
+    let ciaScore = 1;
+    if (data.assetId) {
+      const assetData = await prisma.assetV2.findUnique({
+        where: { id: data.assetId },
+        select: { ciaScore: true },
+      });
+      ciaScore = Math.max(1, Math.min(3, Math.round(assetData?.ciaScore ?? 1)));
+    }
 
+    // New formula: CIA × SLE × ARO
     const singleLossExpectancy = data.singleLossExpectancy ?? null;
     const annualRateOccurrence = data.annualRateOccurrence ?? null;
-    const annualLossExpectancy =
+    const bruttoScore =
       singleLossExpectancy != null && annualRateOccurrence != null
-        ? singleLossExpectancy * annualRateOccurrence
-        : null;
-
-    const nettoProbability = data.nettoProbability || 1;
-    const nettoImpact = data.nettoImpact || 1;
-    const nettoScore = nettoProbability * nettoImpact;
+        ? parseFloat((ciaScore * singleLossExpectancy * annualRateOccurrence).toFixed(2))
+        : 0;
+    const annualLossExpectancy = bruttoScore > 0 ? bruttoScore : null;
 
     const nettoSLE = data.nettoSLE ?? null;
     const nettoARO = data.nettoARO ?? null;
-    const nettoALE =
-      nettoSLE != null && nettoARO != null ? nettoSLE * nettoARO : null;
+    const nettoScore =
+      nettoSLE != null && nettoARO != null
+        ? parseFloat((ciaScore * nettoSLE * nettoARO).toFixed(2))
+        : 0;
+    const nettoALE = nettoScore > 0 ? nettoScore : null;
+
+    // Passthrough probability/impact (keep for schema compatibility)
+    const bruttoProbability = data.bruttoProbability || 1;
+    const bruttoImpact = data.bruttoImpact || 1;
+    const nettoProbability = data.nettoProbability || 1;
+    const nettoImpact = data.nettoImpact || 1;
 
     const risk = await prisma.riskV2.create({
       data: {
@@ -113,6 +126,7 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             category: true,
+            ciaScore: true,
           },
         },
       },

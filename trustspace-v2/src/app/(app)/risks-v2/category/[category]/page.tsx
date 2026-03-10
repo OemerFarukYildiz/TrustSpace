@@ -4,88 +4,70 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
-  ChevronDown,
   Plus,
   Search,
   Filter,
   ArrowRight,
-  X,
   Shield,
   AlertTriangle,
   CheckCircle2,
   TrendingDown,
   Clock,
+  Loader2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
-import { RiskThreatDetailPanel } from "@/components/risk-threat-panel";
+import { RiskV2Panel, type RiskV2Data } from "@/components/risk-v2-panel";
+import { cn } from "@/lib/utils";
 
 const categoryTitles: Record<string, string> = {
-  processes: "Processes",
-  software: "Software",
-  hardware: "Hardware",
-  locations: "Locations",
-  suppliers: "Suppliers",
+  information: "Informationen",
+  application: "Anwendungen",
+  infrastructure: "Infrastruktur",
+  personnel: "Personal",
+  physical: "Physische Assets",
 };
 
 const categoryDescriptions: Record<string, string> = {
-  processes: "Record all essential business processes that take place within the scope of the ISMS.",
-  software: "Record internally used software solutions.",
-  hardware: "Capture all IT hardware used in the ISMS application area.",
-  locations: "Record different locations and premises of your company.",
-  suppliers: "Record external service providers & suppliers who are active in the scope of the ISMS.",
+  information: "Datenbestände, Datenbanken und vertrauliche Informationen im ISMS-Scope.",
+  application: "Software und Applikationen, die im ISMS-Scope betrieben werden.",
+  infrastructure: "IT-Infrastruktur, Server und Netzwerkkomponenten.",
+  personnel: "Mitarbeiter und Verantwortliche im ISMS-Scope.",
+  physical: "Standorte, Gebäude und physische Komponenten.",
 };
 
-const categoryMapping: Record<string, string> = {
-  processes: "process",
-  software: "software",
-  hardware: "hardware",
-  locations: "location",
-  suppliers: "supplier",
-};
-
-interface Asset {
+interface AssetV2 {
   id: string;
   name: string;
-  createdAt: string;
-  ciaAverage: number;
+  category: string;
+  ciaScore: number;
   confidentiality: number;
   integrity: number;
   availability: number;
-  owner: { firstName: string; lastName: string } | null;
-  riskCount: number;
-}
-
-interface CategoryRiskThreat {
-  id: string;
-  assetId: string;
-  assetName: string;
-  ciaAverage: number;
-  schadenStufe: number;
-  wahrscheinlichkeitStufe: number;
-  nettoSchadenStufe: number;
-  nettoWahrscheinlichkeitStufe: number;
-  schadenInEuro?: number | null;
-  v1BruttoScore: number;
-  v1NettoScore: number;
-  schadenklasse?: number | null;
-  wahrscheinlichkeitV2?: number | null;
-  v2BruttoScore?: number | null;
-  controlsMapped: string;
-  threatScenario: { code: string; name: string; description: string };
+  dataClassification: string;
+  replacementCost: number | null;
+  status: string;
   createdAt: string;
-  updatedAt: string;
+  _count?: { risksV2: number };
 }
 
-function getRiskLevelInfo(score: number) {
-  if (score >= 12) return { label: "Kritisch", color: "text-red-700", bg: "bg-red-100" };
-  if (score >= 8) return { label: "Hoch", color: "text-orange-700", bg: "bg-orange-100" };
-  if (score >= 4) return { label: "Mittel", color: "text-yellow-700", bg: "bg-yellow-100" };
-  return { label: "Niedrig", color: "text-green-700", bg: "bg-green-100" };
+function formatEUR(amount: number | null): string {
+  if (!amount) return "—";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(amount);
 }
 
-// Modal Component
-function AddAssetModal({
+function getRiskLevelV2(score: number) {
+  if (score >= 70) return { label: "Kritisch", color: "text-red-700", bg: "bg-red-100" };
+  if (score >= 50) return { label: "Hoch", color: "text-orange-700", bg: "bg-orange-100" };
+  if (score >= 25) return { label: "Mittel", color: "text-yellow-700", bg: "bg-yellow-100" };
+  if (score >= 10) return { label: "Niedrig", color: "text-blue-700", bg: "bg-blue-100" };
+  return { label: "Minimal", color: "text-green-700", bg: "bg-green-100" };
+}
+
+// Add Asset Modal for V2
+function AddAssetV2Modal({
   isOpen,
   onClose,
   category,
@@ -105,14 +87,15 @@ function AddAssetModal({
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/assets", {
+      const res = await fetch("/api/v2/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim(),
-          category: categoryMapping[category],
-          type: "primary",
+          category,
+          dataClassification: "internal",
+          status: "active",
         }),
       });
       if (res.ok) {
@@ -122,10 +105,10 @@ function AddAssetModal({
         onClose();
       } else {
         const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
-        alert("Failed to create asset: " + (errorData.error || "Unknown error"));
+        alert("Fehler beim Erstellen des Assets: " + (errorData.error || "Unbekannter Fehler"));
       }
     } catch (error) {
-      alert("Error creating asset: " + (error as Error).message);
+      alert("Fehler: " + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -137,7 +120,7 @@ function AddAssetModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Add New Asset</h2>
+          <h2 className="text-lg font-semibold">Asset anlegen</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -145,26 +128,26 @@ function AddAssetModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Asset Name *</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Videoüberwachung" required />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="z.B. Kundendatenbank" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the asset..."
+              placeholder="Asset beschreiben..."
               rows={3}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <Input value={categoryTitles[category]} disabled className="bg-gray-50" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Kategorie</label>
+            <Input value={categoryTitles[category] || category} disabled className="bg-gray-50" />
           </div>
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Abbrechen</Button>
             <Button type="submit" className="flex-1 bg-[#0066FF] hover:bg-blue-700" disabled={loading || !name.trim()}>
-              {loading ? "Creating..." : "Create Asset"}
+              {loading ? "Erstelle..." : "Asset erstellen"}
             </Button>
           </div>
         </form>
@@ -173,123 +156,88 @@ function AddAssetModal({
   );
 }
 
-interface CategoryStats {
-  assetsPercent: number;
-  risksPercent: number;
-  assetCount: number;
-  calculatedCount: number;
-  withRisksCount: number;
-}
-
-export default function AssetListPage() {
+export default function RisksV2CategoryPage() {
   const { category } = useParams();
   const router = useRouter();
   const [activeView, setActiveView] = useState<"assets" | "risiken">("assets");
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [riskThreats, setRiskThreats] = useState<CategoryRiskThreat[]>([]);
-  const [selectedRiskThreat, setSelectedRiskThreat] = useState<CategoryRiskThreat | null>(null);
   const [riskTab, setRiskTab] = useState<"alle" | "massnahmen">("alle");
-  const [stats, setStats] = useState<CategoryStats>({
-    assetsPercent: 0,
-    risksPercent: 0,
-    assetCount: 0,
-    calculatedCount: 0,
-    withRisksCount: 0,
-  });
+  const [assets, setAssets] = useState<AssetV2[]>([]);
+  const [risks, setRisks] = useState<RiskV2Data[]>([]);
+  const [selectedRisk, setSelectedRisk] = useState<RiskV2Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const catKey = category as string;
+  const title = categoryTitles[catKey] || catKey;
+  const description = categoryDescriptions[catKey] || "";
+
   useEffect(() => {
-    loadAssets();
-    loadStats();
-    loadRiskThreats();
-  }, [category]);
-
-  const loadAssets = async () => {
-    try {
-      const res = await fetch(`/api/assets?category=${category}`);
-      if (res.ok) setAssets(await res.json());
-    } catch (error) {
-      console.error("Failed to load assets:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const res = await fetch("/api/assets/stats");
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data[category as string] || stats);
-      }
-    } catch (error) {
-      console.error("Failed to load stats:", error);
-    }
-  };
-
-  const loadRiskThreats = async () => {
-    try {
-      const res = await fetch(`/api/risk-threats/category?category=${category}`);
-      if (res.ok) setRiskThreats(await res.json());
-    } catch (error) {
-      console.error("Failed to load risk threats:", error);
-    }
-  };
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/v2/assets?category=${catKey}`).then((r) => r.json()),
+      fetch(`/api/v2/risks`).then((r) => r.json()),
+    ])
+      .then(([assetsData, risksData]) => {
+        setAssets(Array.isArray(assetsData) ? assetsData : []);
+        // Filter risks to this asset category
+        const allRisks: RiskV2Data[] = Array.isArray(risksData) ? risksData : [];
+        setRisks(allRisks.filter((r) => r.asset?.category === catKey));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [catKey]);
 
   const filteredAssets = assets.filter((a) =>
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredRisks = riskThreats.filter((rt) =>
-    rt.threatScenario.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    rt.threatScenario.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    rt.assetName.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredRisks = risks.filter((r) =>
+    r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (r.asset?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const getCiaBadge = (ciaAverage: number) => {
-    if (!ciaAverage || ciaAverage === 0) {
-      return <span className="px-3 py-1 rounded-full text-sm font-medium bg-orange-50 text-orange-600 border border-orange-100">NA</span>;
-    }
-    return <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-50 text-green-600 border border-green-100">{ciaAverage.toFixed(2)}</span>;
-  };
-
-  if (loading) return <div className="p-8">Loading...</div>;
-
   // Risk stats
-  const highRisks = riskThreats.filter((rt) => rt.v1BruttoScore >= 8).length;
-  const withControls = riskThreats.filter((rt) => {
-    try { const mc = JSON.parse(rt.controlsMapped); return Array.isArray(mc) && mc.length > 0; } catch { return false; }
+  const highRisks = risks.filter((r) => r.bruttoScore >= 50).length;
+  const withControls = risks.filter((r) => {
+    try { const c = r.mappedControls ? JSON.parse(r.mappedControls) : []; return c.length > 0; } catch { return false; }
   }).length;
-  const nettoCalc = riskThreats.filter((rt) => rt.nettoSchadenStufe > 1 || rt.v1NettoScore !== rt.v1BruttoScore).length;
+  const nettoCalc = risks.filter((r) => r.nettoScore > 1 && r.nettoScore !== r.bruttoScore).length;
+
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/risks" className="hover:text-gray-900">Risk & Asset Management</Link>
+        <Link href="/risks-v2" className="hover:text-gray-900">Risks & Assets V2</Link>
         <span className="text-gray-400">/</span>
-        <span className="text-gray-900">{categoryTitles[category as string]}</span>
+        <span className="text-gray-900">{title}</span>
       </div>
 
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{categoryTitles[category as string]}</h1>
-          <p className="text-sm text-gray-500 mt-1">{categoryDescriptions[category as string]}</p>
+          <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
+          <p className="text-sm text-gray-500 mt-1">{description}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="bg-white">
-            <span className="text-sm">Assets Calculated {stats.assetsPercent}%</span>
+          <Button variant="outline" className="bg-white text-sm">
+            Assets: {assets.length}
           </Button>
-          <Button variant="outline" className="bg-white">
-            <span className="text-sm">Risks Assigned {stats.risksPercent}%</span>
+          <Button variant="outline" className="bg-white text-sm">
+            Risiken: {risks.length}
           </Button>
         </div>
       </div>
 
-      {/* View Toggle: Assets / Risiken */}
+      {/* View Toggle */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
         <button
           onClick={() => setActiveView("assets")}
@@ -305,17 +253,17 @@ export default function AssetListPage() {
             activeView === "risiken" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-900"
           }`}
         >
-          Risiken ({riskThreats.length})
+          Risiken ({risks.length})
         </button>
       </div>
 
-      {/* Search + Actions toolbar */}
+      {/* Search + Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <Input
-              placeholder={activeView === "assets" ? "Search Assets" : "Search Risks"}
+              placeholder={activeView === "assets" ? "Asset suchen..." : "Risiko suchen..."}
               className="pl-9 w-64 bg-white"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -329,7 +277,7 @@ export default function AssetListPage() {
         {activeView === "assets" && (
           <Button className="bg-[#0066FF] hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Add new
+            Asset anlegen
           </Button>
         )}
       </div>
@@ -338,37 +286,60 @@ export default function AssetListPage() {
       {activeView === "assets" && (
         <>
           <div className="flex items-center px-4 py-2 text-sm text-gray-500 border-b">
-            <div className="flex-1 flex items-center gap-1">Name <ChevronDown className="w-3 h-3" /></div>
-            <div className="w-32 flex items-center gap-1">Creation <ChevronDown className="w-3 h-3" /></div>
-            <div className="w-28 flex items-center gap-1">CIA Average <ChevronDown className="w-3 h-3" /></div>
-            <div className="w-28">Assigned To</div>
-            <div className="w-16">Risks</div>
-            <div className="w-8"></div>
+            <div className="flex-1">Name</div>
+            <div className="w-40">Erstellt</div>
+            <div className="w-28">CIA Score</div>
+            <div className="w-32">Klassifizierung</div>
+            <div className="w-32">Wiederbeschaffung</div>
+            <div className="w-16">Risiken</div>
+            <div className="w-8" />
           </div>
           <div className="space-y-2">
-            {filteredAssets.map((asset) => (
-              <div
-                key={asset.id}
-                onClick={() => router.push(`/risks/${asset.id}`)}
-                className="flex items-center px-4 py-3 bg-white rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-sm cursor-pointer transition-all"
-              >
-                <div className="flex-1 flex items-center gap-3">
-                  <button className="p-1 hover:bg-gray-100 rounded" onClick={(e) => e.stopPropagation()}>
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  </button>
-                  <span className="text-gray-900 font-medium">{asset.name}</span>
-                </div>
-                <div className="w-32 text-sm text-gray-500">
-                  {new Date(asset.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-                </div>
-                <div className="w-28">{getCiaBadge(asset.ciaAverage)}</div>
-                <div className="w-28 text-sm text-gray-400">
-                  {asset.owner ? `${asset.owner.firstName} ${asset.owner.lastName}` : "-"}
-                </div>
-                <div className="w-16 text-sm text-gray-500">{asset.riskCount}</div>
-                <div className="w-8"><ArrowRight className="w-4 h-4 text-gray-400" /></div>
+            {filteredAssets.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 bg-white rounded-lg border border-gray-100">
+                <Shield className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p>Noch keine Assets in dieser Kategorie</p>
+                <Button className="mt-4 bg-[#0066FF]" onClick={() => setIsModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Asset anlegen
+                </Button>
               </div>
-            ))}
+            ) : (
+              filteredAssets.map((asset) => (
+                <div
+                  key={asset.id}
+                  onClick={() => router.push(`/risks-v2/assets/${asset.id}`)}
+                  className="flex items-center px-4 py-3 bg-white rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-sm cursor-pointer transition-all"
+                >
+                  <div className="flex-1 text-gray-900 font-medium">{asset.name}</div>
+                  <div className="w-40 text-sm text-gray-500">
+                    {new Date(asset.createdAt).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}
+                  </div>
+                  <div className="w-28">
+                    {asset.ciaScore > 0 ? (
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-sm font-medium border",
+                        asset.ciaScore >= 7 ? "bg-red-50 text-red-600 border-red-100" :
+                        asset.ciaScore >= 5 ? "bg-orange-50 text-orange-600 border-orange-100" :
+                        "bg-green-50 text-green-600 border-green-100"
+                      )}>
+                        {asset.ciaScore.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-orange-50 text-orange-600 border border-orange-100">NA</span>
+                    )}
+                  </div>
+                  <div className="w-32">
+                    <Badge variant="outline" className="text-xs capitalize">{asset.dataClassification}</Badge>
+                  </div>
+                  <div className="w-32 text-sm text-gray-500">{formatEUR(asset.replacementCost)}</div>
+                  <div className="w-16 text-sm text-gray-500">{asset._count?.risksV2 ?? 0}</div>
+                  <div className="w-8">
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </>
       )}
@@ -383,7 +354,7 @@ export default function AssetListPage() {
                 <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Gesamt Risiken</span>
                 <Shield className="h-4 w-4 text-gray-400" />
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{riskThreats.length}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-2">{risks.length}</p>
               <p className="text-xs text-gray-400 mt-1">Aktive Risiken im System</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -400,7 +371,7 @@ export default function AssetListPage() {
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               </div>
               <p className="text-2xl font-bold text-emerald-600 mt-2">{withControls}</p>
-              <p className="text-xs text-gray-400 mt-1">{riskThreats.length - withControls} ohne Maßnahmen</p>
+              <p className="text-xs text-gray-400 mt-1">{risks.length - withControls} ohne Maßnahmen</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
@@ -410,7 +381,7 @@ export default function AssetListPage() {
               <p className="text-2xl font-bold text-blue-600 mt-2">{nettoCalc}</p>
               <div className="flex items-center gap-1 mt-1">
                 <Clock className="h-3 w-3 text-amber-500" />
-                <p className="text-xs text-gray-400">{riskThreats.length - nettoCalc} ausstehend</p>
+                <p className="text-xs text-gray-400">{risks.length - nettoCalc} ausstehend</p>
               </div>
             </div>
           </div>
@@ -437,59 +408,57 @@ export default function AssetListPage() {
                 Maßnahmen & Berechnung
               </button>
               <div className="ml-auto pr-4">
-                <span className="text-xs text-gray-400">{riskThreats.length} Risiken</span>
+                <span className="text-xs text-gray-400">{risks.length} Risiken</span>
               </div>
             </div>
 
-            {riskThreats.length === 0 ? (
+            {risks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                 <Shield className="w-12 h-12 mb-4 text-gray-300" />
                 <p className="text-lg">Keine Risiken in dieser Kategorie</p>
-                <p className="text-sm mt-1">Bedrohungsszenarien einem Asset zuweisen, um sie hier zu sehen.</p>
+                <p className="text-sm mt-1">Assets anlegen und Risiken zuweisen, um sie hier zu sehen.</p>
               </div>
             ) : riskTab === "alle" ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Risiko</th>
                       <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Asset</th>
-                      <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Szenario</th>
-                      <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Bezeichnung</th>
-                      <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">CIA</th>
+                      <th className="text-left p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">ALE</th>
                       <th className="text-right p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Brutto</th>
                       <th className="text-right p-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Netto</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRisks.map((rt) => {
-                      const bruttoLevel = getRiskLevelInfo(Math.round(rt.v1BruttoScore));
-                      const nettoLevel = getRiskLevelInfo(Math.round(rt.v1NettoScore));
-                      const isNettoCalc = rt.nettoSchadenStufe > 1 || rt.v1NettoScore !== rt.v1BruttoScore;
+                    {filteredRisks.map((risk) => {
+                      const bruttoLevel = getRiskLevelV2(risk.bruttoScore);
+                      const nettoLevel = getRiskLevelV2(risk.nettoScore);
+                      const hasNetto = risk.nettoScore > 1 && risk.nettoScore !== risk.bruttoScore;
                       return (
                         <tr
-                          key={rt.id}
+                          key={risk.id}
                           className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                          onClick={() => setSelectedRiskThreat(rt)}
+                          onClick={() => setSelectedRisk(risk)}
                         >
                           <td className="p-3">
-                            <span className="text-sm font-medium text-blue-600">{rt.assetName}</span>
+                            <span className="text-sm font-medium text-gray-900 truncate max-w-[220px] block">{risk.title}</span>
                           </td>
                           <td className="p-3">
-                            <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{rt.threatScenario.code}</span>
+                            <span className="text-sm text-blue-600">{risk.asset?.name || "—"}</span>
                           </td>
-                          <td className="p-3">
-                            <span className="text-sm text-gray-700 truncate max-w-[220px] block">{rt.threatScenario.name}</span>
+                          <td className="p-3 text-sm text-gray-600">
+                            {risk.annualLossExpectancy ? formatEUR(risk.annualLossExpectancy) : "—"}
                           </td>
-                          <td className="p-3 text-sm text-gray-500">{rt.ciaAverage.toFixed(2)}</td>
                           <td className="p-3 text-right">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${bruttoLevel.bg} ${bruttoLevel.color}`}>
-                              {rt.v1BruttoScore.toFixed(2)}
+                              {risk.bruttoScore}
                             </span>
                           </td>
                           <td className="p-3 text-right">
-                            {isNettoCalc ? (
+                            {hasNetto ? (
                               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${nettoLevel.bg} ${nettoLevel.color}`}>
-                                {rt.v1NettoScore.toFixed(2)}
+                                {risk.nettoScore}
                               </span>
                             ) : (
                               <span className="text-xs text-gray-400">--</span>
@@ -516,26 +485,26 @@ export default function AssetListPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRisks.map((rt) => {
+                    {filteredRisks.map((risk) => {
                       let controlCount = 0;
-                      try { const mc = JSON.parse(rt.controlsMapped); controlCount = Array.isArray(mc) ? mc.length : 0; } catch { /* */ }
-                      const isNettoCalc = rt.nettoSchadenStufe > 1 || rt.v1NettoScore !== rt.v1BruttoScore;
-                      const reduktion = isNettoCalc && rt.v1BruttoScore > 0
-                        ? Math.round(((rt.v1BruttoScore - rt.v1NettoScore) / rt.v1BruttoScore) * 100)
+                      try { controlCount = risk.mappedControls ? JSON.parse(risk.mappedControls).length : 0; } catch { /* */ }
+                      const hasNetto = risk.nettoScore > 1 && risk.nettoScore !== risk.bruttoScore;
+                      const reduktion = hasNetto && risk.bruttoScore > 0
+                        ? Math.round(((risk.bruttoScore - risk.nettoScore) / risk.bruttoScore) * 100)
                         : null;
-                      const bruttoLevel = getRiskLevelInfo(Math.round(rt.v1BruttoScore));
-                      const nettoLevel = getRiskLevelInfo(Math.round(rt.v1NettoScore));
+                      const bruttoLevel = getRiskLevelV2(risk.bruttoScore);
+                      const nettoLevel = getRiskLevelV2(risk.nettoScore);
                       return (
                         <tr
-                          key={rt.id}
+                          key={risk.id}
                           className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                          onClick={() => setSelectedRiskThreat(rt)}
+                          onClick={() => setSelectedRisk(risk)}
                         >
                           <td className="p-3">
-                            <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{rt.threatScenario.code}</span>
+                            <span className="text-sm font-medium text-gray-900 truncate max-w-[200px] block">{risk.title}</span>
                           </td>
                           <td className="p-3">
-                            <span className="text-sm text-blue-600">{rt.assetName}</span>
+                            <span className="text-sm text-blue-600">{risk.asset?.name || "—"}</span>
                           </td>
                           <td className="p-3 text-center">
                             {controlCount === 0 ? (
@@ -549,11 +518,11 @@ export default function AssetListPage() {
                             )}
                           </td>
                           <td className="p-3 text-center">
-                            {isNettoCalc ? (
+                            {hasNetto ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
                                 <CheckCircle2 className="h-3 w-3" />Netto berechnet
                               </span>
-                            ) : rt.v1BruttoScore > 0 ? (
+                            ) : risk.bruttoScore > 1 ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                                 <Clock className="h-3 w-3" />Nur Brutto
                               </span>
@@ -565,13 +534,13 @@ export default function AssetListPage() {
                           </td>
                           <td className="p-3 text-right">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${bruttoLevel.bg} ${bruttoLevel.color}`}>
-                              {rt.v1BruttoScore.toFixed(2)}
+                              {risk.bruttoScore}
                             </span>
                           </td>
                           <td className="p-3 text-right">
-                            {isNettoCalc ? (
+                            {hasNetto ? (
                               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${nettoLevel.bg} ${nettoLevel.color}`}>
-                                {rt.v1NettoScore.toFixed(2)}
+                                {risk.nettoScore}
                               </span>
                             ) : (
                               <span className="text-xs text-gray-400">--</span>
@@ -598,29 +567,19 @@ export default function AssetListPage() {
             )}
           </div>
 
-          {/* Risk detail panel */}
-          {selectedRiskThreat && (
-            <RiskThreatDetailPanel
-              riskThreat={selectedRiskThreat}
-              asset={{
-                id: selectedRiskThreat.assetId,
-                name: selectedRiskThreat.assetName,
-                ciaAverage: selectedRiskThreat.ciaAverage,
-                confidentiality: 0,
-                integrity: 0,
-                availability: 0,
-              }}
-              onClose={() => setSelectedRiskThreat(null)}
+          {/* Right-side detail panel */}
+          {selectedRisk && (
+            <RiskV2Panel
+              risk={selectedRisk}
+              onClose={() => setSelectedRisk(null)}
               onUpdate={(updated) => {
-                setRiskThreats((prev) =>
-                  prev.map((rt) => rt.id === selectedRiskThreat.id ? { ...rt, ...updated } : rt)
-                );
-                setSelectedRiskThreat((prev) => prev ? { ...prev, ...updated } : null);
+                setRisks((prev) => prev.map((r) => r.id === selectedRisk.id ? { ...r, ...updated } : r));
+                setSelectedRisk((prev) => prev ? { ...prev, ...updated } : null);
               }}
               onDelete={async () => {
-                await fetch(`/api/risk-threats/${selectedRiskThreat.id}`, { method: "DELETE" });
-                setRiskThreats((prev) => prev.filter((rt) => rt.id !== selectedRiskThreat.id));
-                setSelectedRiskThreat(null);
+                await fetch(`/api/v2/risks/${selectedRisk.id}`, { method: "DELETE" });
+                setRisks((prev) => prev.filter((r) => r.id !== selectedRisk.id));
+                setSelectedRisk(null);
               }}
             />
           )}
@@ -628,11 +587,15 @@ export default function AssetListPage() {
       )}
 
       {/* Add Asset Modal */}
-      <AddAssetModal
+      <AddAssetV2Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        category={category as string}
-        onAssetCreated={loadAssets}
+        category={catKey}
+        onAssetCreated={() => {
+          fetch(`/api/v2/assets?category=${catKey}`)
+            .then((r) => r.json())
+            .then((data) => setAssets(Array.isArray(data) ? data : []));
+        }}
       />
     </div>
   );
