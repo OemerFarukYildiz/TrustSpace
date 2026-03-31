@@ -898,6 +898,13 @@ export default function DocumentsPage() {
               <span className="px-2 py-1 text-gray-900 font-medium truncate max-w-[200px]">
                 {editingPage.name}
               </span>
+              <button
+                onClick={() => setEditingPageFullscreen(true)}
+                className="ml-2 flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-[#0066FF] hover:bg-blue-700 rounded-md transition-colors"
+              >
+                <Edit3 className="w-3 h-3" />
+                Bearbeiten
+              </button>
             </div>
           )}
         </div>
@@ -1083,16 +1090,7 @@ export default function DocumentsPage() {
             /* Page Preview */
             <div className="h-full overflow-y-auto">
               <div className="max-w-[720px] mx-auto px-8 py-10">
-                <div className="flex items-center justify-between mb-8">
-                  <h1 className="text-[2rem] font-bold text-gray-900">{editingPage.name}</h1>
-                  <button
-                    onClick={() => setEditingPageFullscreen(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0066FF] hover:bg-blue-700 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    Bearbeiten
-                  </button>
-                </div>
+                <h1 className="text-[2rem] font-bold text-gray-900 mb-8">{editingPage.name}</h1>
                 {editingPage.content ? (
                   <div
                     className="prose prose-sm max-w-none text-gray-700 leading-relaxed"
