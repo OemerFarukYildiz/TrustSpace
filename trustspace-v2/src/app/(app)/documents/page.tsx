@@ -737,7 +737,7 @@ export default function DocumentsPage() {
   // ---- Keyboard ----
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (renamingId || isCreateFolderOpen || viewingFile || editingFile) return;
+      if (renamingId || isCreateFolderOpen || viewingFile || editingFile || editingPage || editingPageFullscreen) return;
 
       if (e.key === "Backspace" && !e.metaKey) {
         e.preventDefault();
