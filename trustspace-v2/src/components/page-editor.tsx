@@ -586,6 +586,9 @@ export default function PageEditor({
     if (!editor) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Only intercept when a menu is open - otherwise let ALL keys through to Tiptap
+      if (!slashOpen && !mentionOpen) return;
+
       // ── Slash menu handling ─────────────────────────────────────────────
       if (slashOpen) {
         if (event.key === "ArrowDown") {

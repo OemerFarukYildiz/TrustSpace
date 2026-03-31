@@ -300,6 +300,7 @@ export default function DocumentsPage() {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [editingFile, setEditingFile] = useState<DocumentFile | null>(null);
   const [editingPage, setEditingPage] = useState<DocumentFile | null>(null);
+  const [editingPageFullscreen, setEditingPageFullscreen] = useState(false);
   const [collaboraFile, setCollaboraFile] = useState<DocumentFile | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -1079,26 +1080,30 @@ export default function DocumentsPage() {
           }}
         >
           {editingPage ? (
-            <PageEditor
-              initialContent={editingPage.content || ""}
-              title={editingPage.name}
-              onTitleChange={async (title) => {
-                setEditingPage((prev) => prev ? { ...prev, name: title } : prev);
-                await fetch(`/api/documents/${editingPage.id}`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: title }),
-                });
-                reloadFiles();
-              }}
-              onSave={async (html) => {
-                await fetch(`/api/documents/${editingPage.id}`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ content: html }),
-                });
-              }}
-            />
+            /* Page Preview */
+            <div className="h-full overflow-y-auto">
+              <div className="max-w-[720px] mx-auto px-8 py-10">
+                <div className="flex items-center justify-between mb-8">
+                  <h1 className="text-[2rem] font-bold text-gray-900">{editingPage.name}</h1>
+                  <button
+                    onClick={() => setEditingPageFullscreen(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0066FF] hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Bearbeiten
+                  </button>
+                </div>
+                {editingPage.content ? (
+                  <div
+                    className="prose prose-sm max-w-none text-gray-700 leading-relaxed"
+                    style={{ fontSize: "15px", lineHeight: "1.8" }}
+                    dangerouslySetInnerHTML={{ __html: editingPage.content }}
+                  />
+                ) : (
+                  <p className="text-gray-400 text-sm">Diese Seite ist noch leer. Klicke &quot;Bearbeiten&quot; um Inhalte hinzuzufügen.</p>
+                )}
+              </div>
+            </div>
           ) : folderContents.length === 0 ? (
             /* Empty state */
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -1526,6 +1531,55 @@ export default function DocumentsPage() {
           fileName={collaboraFile.name}
           onClose={() => setCollaboraFile(null)}
         />
+      )}
+
+      {/* Fullscreen Page Editor */}
+      {editingPageFullscreen && editingPage && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white shrink-0">
+            <button
+              onClick={async () => {
+                setEditingPageFullscreen(false);
+                // Reload the page content to show updated preview
+                const res = await fetch(`/api/documents/${editingPage.id}`);
+                if (res.ok) {
+                  const updated = await res.json();
+                  setEditingPage(updated);
+                }
+                reloadFiles();
+              }}
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowUp className="w-4 h-4 -rotate-90" />
+              Zurück zur Vorschau
+            </button>
+            <span className="text-xs text-gray-400">{editingPage.name}</span>
+          </div>
+          {/* Editor */}
+          <div className="flex-1 min-h-0">
+            <PageEditor
+              initialContent={editingPage.content || ""}
+              title={editingPage.name}
+              onTitleChange={async (t) => {
+                setEditingPage((prev) => prev ? { ...prev, name: t } : prev);
+                await fetch(`/api/documents/${editingPage.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: t }),
+                });
+              }}
+              onSave={async (html) => {
+                setEditingPage((prev) => prev ? { ...prev, content: html } : prev);
+                await fetch(`/api/documents/${editingPage.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ content: html }),
+                });
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
