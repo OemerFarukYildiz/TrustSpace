@@ -1,13 +1,13 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/v2/risks/matrix - Risikomatrix-Daten (10x10)
 export async function GET() {
   try {
     const risks = await prisma.riskV2.findMany({
-      where: { organizationId: ORG_ID },
+      where: { organizationId: (await getOrgId()) },
       include: {
         asset: {
           select: {

@@ -1,7 +1,7 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 function getRiskLevel(score: number): string {
   if (score >= 80) return "critical";
@@ -15,7 +15,7 @@ function getRiskLevel(score: number): string {
 export async function GET() {
   try {
     const risks = await prisma.riskV2.findMany({
-      where: { organizationId: ORG_ID },
+      where: { organizationId: (await getOrgId()) },
     });
 
     const totalRisks = risks.length;

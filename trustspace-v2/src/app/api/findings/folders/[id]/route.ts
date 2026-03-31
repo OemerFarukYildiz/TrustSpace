@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -18,7 +19,7 @@ export async function PATCH(
 
   // Update all findings that referenced the old folder name
   await prisma.finding.updateMany({
-    where: { organizationId: "default-org", folder: existing.name, type: existing.type },
+    where: { organizationId: await getOrgId(), folder: existing.name, type: existing.type },
     data: { folder: name },
   });
 
@@ -36,7 +37,7 @@ export async function DELETE(
 
   // Move findings to ungrouped
   await prisma.finding.updateMany({
-    where: { organizationId: "default-org", folder: existing.name, type: existing.type },
+    where: { organizationId: await getOrgId(), folder: existing.name, type: existing.type },
     data: { folder: null },
   });
 

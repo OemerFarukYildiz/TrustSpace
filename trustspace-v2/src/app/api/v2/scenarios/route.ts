@@ -1,7 +1,8 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default";
+
 
 // Risikoszenarien-Katalog (BSI / ISO 27001 basiert)
 const RISK_SCENARIOS = [
@@ -53,7 +54,7 @@ const RISK_SCENARIOS = [
 export async function GET() {
   try {
     const scenarios = await prisma.threatScenario.findMany({
-      where: { organizationId: ORG_ID },
+      where: { organizationId: await getOrgId() },
       orderBy: { code: "asc" },
     });
     return NextResponse.json(scenarios);
@@ -74,7 +75,7 @@ export async function POST() {
 
     for (const scenario of RISK_SCENARIOS) {
       const existing = await prisma.threatScenario.findFirst({
-        where: { organizationId: ORG_ID, code: scenario.code },
+        where: { organizationId: await getOrgId(), code: scenario.code },
       });
 
       if (existing) {
@@ -84,7 +85,7 @@ export async function POST() {
 
       await prisma.threatScenario.create({
         data: {
-          organizationId: ORG_ID,
+          organizationId: await getOrgId(),
           code: scenario.code,
           name: scenario.name,
           description: scenario.name,

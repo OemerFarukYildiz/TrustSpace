@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OSVClient } from "@/lib/osv";
@@ -56,8 +57,8 @@ export async function POST(
 
     // Register in FindingFolder table so it shows in folder management UI
     await prisma.findingFolder.upsert({
-      where: { organizationId_type_name: { organizationId: "default-org", type: "vulnerability", name: scanFolder } },
-      create: { organizationId: "default-org", type: "vulnerability", name: scanFolder },
+      where: { organizationId_type_name: { organizationId: await getOrgId(), type: "vulnerability", name: scanFolder } },
+      create: { organizationId: await getOrgId(), type: "vulnerability", name: scanFolder },
       update: {},
     });
 
@@ -93,22 +94,10 @@ export async function POST(
           },
         });
 
-        // Fetch authoritative details from OSV (incl. GitHub CVSS score for GHSA IDs)
-        let resolvedSeverity = vuln.severity;
-        let resolvedScore = vuln.cvssScore;
-        let remediation = vuln.details || vuln.summary || "";
-        try {
-          const osvRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/osv/${vuln.cveId}`);
-          if (osvRes.ok) {
-            const osvDetail = await osvRes.json();
-            resolvedSeverity = osvDetail.severity || resolvedSeverity;
-            if (osvDetail.cvssScore != null) resolvedScore = osvDetail.cvssScore;
-            if (osvDetail.details) remediation = osvDetail.details;
-            else if (osvDetail.summary) remediation = osvDetail.summary;
-          }
-        } catch {
-          // fall back to OSV client data
-        }
+        // Use the severity and score directly from OSVClient (already resolved from database_specific + CVSS vector)
+        const resolvedSeverity = (vuln.severity || "LOW").toUpperCase();
+        const resolvedScore = vuln.cvssScore ?? 2.5;
+        const remediation = vuln.details || vuln.summary || "";
 
         if (existingVuln) {
           await prisma.vexVulnerability.update({
@@ -129,7 +118,7 @@ export async function POST(
           if (!hasFinding) {
             await prisma.finding.create({
               data: {
-                organizationId: "default-org",
+                organizationId: await getOrgId(),
                 title: vuln.cveId,
                 description: remediation || undefined,
                 type: "vulnerability",
@@ -157,7 +146,7 @@ export async function POST(
           // Auto-create a Finding (Maßnahme) for each new CVE
           await prisma.finding.create({
             data: {
-              organizationId: "default-org",
+              organizationId: await getOrgId(),
               title: vuln.cveId,
               description: remediation || undefined,
               type: "vulnerability",

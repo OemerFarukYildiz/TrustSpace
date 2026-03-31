@@ -1,13 +1,13 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/v2/assets/stats - Statistiken fuer V2 Assets
 export async function GET() {
   try {
     const assets = await prisma.assetV2.findMany({
-      where: { organizationId: ORG_ID },
+      where: { organizationId: (await getOrgId()) },
       select: {
         id: true,
         category: true,

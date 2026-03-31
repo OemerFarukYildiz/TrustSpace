@@ -1,7 +1,7 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/v2/risks/[id] - Einzelnes V2 Risiko
 export async function GET(
@@ -12,7 +12,7 @@ export async function GET(
     const { id } = await params;
 
     const risk = await prisma.riskV2.findFirst({
-      where: { id, organizationId: ORG_ID },
+      where: { id, organizationId: (await getOrgId()) },
       include: {
         asset: {
           select: {
@@ -52,7 +52,7 @@ export async function PUT(
     const data = await request.json();
 
     const existing = await prisma.riskV2.findFirst({
-      where: { id, organizationId: ORG_ID },
+      where: { id, organizationId: (await getOrgId()) },
     });
 
     if (!existing) {
@@ -153,7 +153,7 @@ export async function DELETE(
     const { id } = await params;
 
     const existing = await prisma.riskV2.findFirst({
-      where: { id, organizationId: ORG_ID },
+      where: { id, organizationId: (await getOrgId()) },
     });
 
     if (!existing) {

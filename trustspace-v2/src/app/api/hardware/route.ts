@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
         category: "hardware",
         ownerId: data.ownerId || null,
         department: data.location || null,
-        organizationId: "default",
+        organizationId: await getOrgId(),
         confidentiality: 0,
         integrity: 0,
         availability: 0,

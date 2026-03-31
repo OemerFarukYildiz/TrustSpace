@@ -5,6 +5,8 @@ export interface SOAContext {
   industry: string;
   assets: string[];
   existingDocuments: string[];
+  controlDescription?: string;
+  companyContext?: string;
 }
 
 export function generateSOAJustificationPrompt(
@@ -12,23 +14,33 @@ export function generateSOAJustificationPrompt(
   controlTitle: string,
   context: SOAContext
 ): string {
-  return `Generiere eine Begründung für das ISO 27001:2022 Control im Statement of Applicability (SOA).
+  const companyContextSection = context.companyContext
+    ? `\n- Unternehmensspezifische Tools/Prozesse: ${context.companyContext}`
+    : '';
+
+  const controlDescriptionSection = context.controlDescription
+    ? `\n**Control-Beschreibung (was umgesetzt werden soll):**\n${context.controlDescription}\n`
+    : '';
+
+  return `Generiere eine professionelle Begründung für das ISO 27001:2022 Control im Statement of Applicability (SOA).
 
 **Control:** ${controlCode} - ${controlTitle}
-
+${controlDescriptionSection}
 **Kontext:**
 - Unternehmen: ${context.organizationName}
 - Branche: ${context.industry}
 - Wichtige Assets: ${context.assets.join(', ') || 'Nicht spezifiziert'}
-- Vorhandene Dokumente/Richtlinien: ${context.existingDocuments.join(', ') || 'Keine Angabe'}
+- Vorhandene Dokumente/Richtlinien: ${context.existingDocuments.join(', ') || 'Keine Angabe'}${companyContextSection}
 
 **Aufgabe:**
-Schreibe eine kurze, prägnante Begründung (2-4 Sätze), warum dieses Control anwendbar (applicable) ist und wie es im Unternehmen umgesetzt wird. Die Begründung soll:
-- Auf die Branche und Assets eingehen
-- Konkret und nachvollziehbar sein
-- ISO 27001 Audit-tauglich formuliert sein
+Schreibe eine prägnante, audit-taugliche Begründung (3-5 Sätze), warum dieses Control anwendbar (applicable) ist und wie es im Unternehmen konkret umgesetzt wird. Die Begründung soll:
+- Direkt auf die Control-Beschreibung eingehen und erklären, wie das Unternehmen die Anforderung erfüllt
+- Konkrete Tools, Prozesse oder Maßnahmen nennen, sofern im Kontext angegeben
+- Auf die Branche und betroffene Assets eingehen
+- ISO 27001 Audit-tauglich und präzise formuliert sein
+- Wenn kein Unternehmensname bekannt ist, [Firmenname einfügen] als Platzhalter verwenden
 
-Antworte NUR mit der Begründung, ohne Einleitung oder zusätzlichen Text.`;
+Antworte NUR mit der Begründung, ohne Einleitung, Überschriften oder zusätzlichen Text.`;
 }
 
 export function generateSOAChatPrompt(controlCode: string, controlTitle: string): string {

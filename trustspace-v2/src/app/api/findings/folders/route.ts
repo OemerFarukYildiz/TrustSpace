@@ -1,10 +1,11 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 // GET /api/findings/folders?type=vulnerability
 export async function GET(request: NextRequest) {
   const type = request.nextUrl.searchParams.get("type");
-  const where = { organizationId: "default-org", ...(type ? { type } : {}) };
+  const where = { organizationId: await getOrgId(), ...(type ? { type } : {}) };
   const folders = await prisma.findingFolder.findMany({ where, orderBy: { name: "asc" } });
   return NextResponse.json(folders);
 }
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const folder = await prisma.findingFolder.create({
-      data: { organizationId: "default-org", name, type },
+      data: { organizationId: await getOrgId(), name, type },
     });
     return NextResponse.json(folder);
   } catch (error: any) {

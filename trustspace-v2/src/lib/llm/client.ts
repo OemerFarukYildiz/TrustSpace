@@ -93,7 +93,7 @@ class LLMClient {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: options?.model || 'claude-3-5-sonnet-20241022',
+        model: options?.model || 'claude-haiku-4-5-20251001',
         max_tokens: options?.maxTokens ?? 4096,
         temperature: options?.temperature ?? 0.7,
         system: systemMessage?.content,

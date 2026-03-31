@@ -1,7 +1,7 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/v2/assets - Alle V2 Assets auflisten
 export async function GET(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category");
 
     const where: Record<string, unknown> = {
-      organizationId: ORG_ID,
+      organizationId: (await getOrgId()),
     };
 
     if (category) {
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const asset = await prisma.assetV2.create({
       data: {
-        organizationId: ORG_ID,
+        organizationId: (await getOrgId()),
         name: data.name,
         description: data.description || null,
         category: data.category,

@@ -66,7 +66,7 @@ export async function POST() {
           name: scenario.name,
           description: scenario.name,
           category: scenario.category,
-          organizationId: "default",
+          organizationId: "trustspace-org",
         },
       });
       created.push(newThreat);

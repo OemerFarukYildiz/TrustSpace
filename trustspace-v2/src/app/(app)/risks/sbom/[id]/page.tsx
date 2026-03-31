@@ -78,7 +78,7 @@ interface OSVDetail {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, critical: 0, high: 1, medium: 2, low: 3 };
 
 const SEV = {
   CRITICAL: { bg: "bg-red-100", text: "text-red-700", border: "border-red-200", dot: "bg-red-500", label: "Critical", score: "9.0–10.0" },
@@ -93,8 +93,8 @@ function vulnUrl(id: string) {
   return `https://osv.dev/vulnerability/${id}`;
 }
 
-function SeverityBadge({ sev }: { sev: keyof typeof SEV }) {
-  const c = SEV[sev] ?? SEV.LOW;
+function SeverityBadge({ sev }: { sev: string }) {
+  const c = SEV[sev.toUpperCase() as keyof typeof SEV] ?? SEV.LOW;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
@@ -427,7 +427,7 @@ export default function SBOMDetailPage() {
           </div>
           <div className="divide-y divide-gray-100">
             {allVulns.map(vuln => {
-              const cfg = SEV[vuln.severity] ?? SEV.LOW;
+              const cfg = SEV[vuln.severity.toUpperCase() as keyof typeof SEV] ?? SEV.LOW;
               const isOpen = expandedVulns.has(vuln.id);
               return (
                 <div key={vuln.id}>
@@ -548,7 +548,7 @@ export default function SBOMDetailPage() {
                         {comp.vulnerabilities
                           .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
                           .map(vuln => {
-                            const cfg = SEV[vuln.severity] ?? SEV.LOW;
+                            const cfg = SEV[vuln.severity.toUpperCase() as keyof typeof SEV] ?? SEV.LOW;
                             return (
                               <button
                                 key={vuln.id}

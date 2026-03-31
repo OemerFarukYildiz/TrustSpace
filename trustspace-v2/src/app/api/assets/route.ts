@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Prüfe ob Organization existiert, falls nicht erstelle default
     const org = await prisma.organization.findUnique({
-      where: { id: "default" },
+      where: { id: await getOrgId() },
     });
 
     if (!org) {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
         category: data.category || "process",
         ownerId: data.ownerId || null,
         department: data.department || null,
-        organizationId: "default",
+        organizationId: await getOrgId(),
         confidentiality: 0,
         integrity: 0,
         availability: 0,

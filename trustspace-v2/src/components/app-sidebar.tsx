@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -18,12 +18,32 @@ import {
   ChevronDown,
   Server,
   BarChart3,
+  Crosshair,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [companyOpen, setCompanyOpen] = useState(true);
+  const [vulnOpen, setVulnOpen] = useState(true);
+  const [orgName, setOrgName] = useState("TrustSpace GmbH");
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d.orgName) setOrgName(d.orgName); })
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   const isActive = (href: string) => pathname.startsWith(href);
 
@@ -215,14 +235,112 @@ export function AppSidebar() {
           <Calendar className={cn("w-5 h-5", isActive("/audits") ? "text-[#0066FF]" : "text-gray-500")} />
           <span>Audits</span>
         </Link>
+
+        {/* Simulationen */}
+        <Link
+          href="/simulations"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors mb-1",
+            isActive("/simulations")
+              ? "text-[#0066FF] bg-blue-50"
+              : "text-gray-600 hover:bg-gray-50"
+          )}
+        >
+          <AlertTriangle className={cn("w-5 h-5", isActive("/simulations") ? "text-[#0066FF]" : "text-gray-500")} />
+          <span>Simulationen</span>
+          <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-600">NEU</span>
+        </Link>
+
+        {/* Schwachstellenmanagement (aufklappbar) */}
+        <div className="mb-1">
+          <button
+            onClick={() => setVulnOpen(!vulnOpen)}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
+              isActive("/vulnerabilities")
+                ? "text-[#0066FF] bg-blue-50"
+                : "text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            <Crosshair className={cn("w-5 h-5", isActive("/vulnerabilities") ? "text-[#0066FF]" : "text-gray-500")} />
+            <span className="flex-1 text-left">Schwachstellen</span>
+            <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", vulnOpen && "rotate-180")} />
+          </button>
+
+          {vulnOpen && (
+            <div className="ml-9 mt-1 space-y-1">
+              <Link
+                href="/vulnerabilities"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors",
+                  pathname === "/vulnerabilities"
+                    ? "text-[#0066FF] bg-blue-50 font-medium"
+                    : "text-gray-500 hover:bg-gray-50"
+                )}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Übersicht</span>
+              </Link>
+              <Link
+                href="/vulnerabilities/targets"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors",
+                  isActive("/vulnerabilities/targets")
+                    ? "text-[#0066FF] bg-blue-50 font-medium"
+                    : "text-gray-500 hover:bg-gray-50"
+                )}
+              >
+                <Server className="w-4 h-4" />
+                <span>Targets</span>
+              </Link>
+              <Link
+                href="/vulnerabilities/scans"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors",
+                  isActive("/vulnerabilities/scans")
+                    ? "text-[#0066FF] bg-blue-50 font-medium"
+                    : "text-gray-500 hover:bg-gray-50"
+                )}
+              >
+                <Shield className="w-4 h-4" />
+                <span>Scans</span>
+              </Link>
+              <Link
+                href="/vulnerabilities/issues"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors",
+                  isActive("/vulnerabilities/issues")
+                    ? "text-[#0066FF] bg-blue-50 font-medium"
+                    : "text-gray-500 hover:bg-gray-50"
+                )}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>Issues</span>
+              </Link>
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Bottom */}
-      <div className="border-t border-gray-100 p-4">
-        <div className="flex items-center gap-2 px-3">
-          <span className="text-xs text-gray-400">German</span>
-          <ChevronDown className="w-4 h-4 text-gray-400" />
+      <div className="border-t border-gray-100 p-4 space-y-2">
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-blue-50">
+          <div className="w-7 h-7 rounded-md bg-[#0066FF] flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-gray-800 truncate">{orgName}</p>
+            <p className="text-[10px] text-gray-400">Aktive Organisation</p>
+          </div>
         </div>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>{loggingOut ? "Abmelden..." : "Abmelden"}</span>
+        </button>
       </div>
     </aside>
   );

@@ -16,6 +16,8 @@ import {
   X,
   FileText,
   Trash2,
+  Bot,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +109,48 @@ function formatFileSize(bytes: number): string {
 }
 
 // ──────────────────────────────────────────────
+// SSE Parser
+// ──────────────────────────────────────────────
+
+async function* parseSSE(response: Response): AsyncGenerator<string> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = line.slice(6);
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+            yield parsed.delta.text;
+          }
+        } catch {
+          // skip malformed SSE chunks
+        }
+      }
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// Chat Panel Types
+// ──────────────────────────────────────────────
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// ──────────────────────────────────────────────
 // Stat Card
 // ──────────────────────────────────────────────
 
@@ -176,6 +220,8 @@ function ControlRow({
 
   const [saving, setSaving] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [aiPromptOpen, setAiPromptOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
 
   // Evidence state
   const [evidenceFiles, setEvidenceFiles] = useState<EvidenceFile[]>(
@@ -250,16 +296,23 @@ function ControlRow({
           controlCode: control.code,
           controlTitle: control.title,
           context: {
-            isApplicable,
-            currentJustification: justification,
+            organizationName: "[Firmenname einfügen]",
+            industry: "IT & Software",
+            assets: [],
+            existingDocuments: [],
+            controlDescription: control.description || "",
           },
+          companyContext: aiPrompt || undefined,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setJustification(data.justification || "");
+        setAiPromptOpen(false);
+        setAiPrompt("");
       } else {
-        alert("KI-Generierung fehlgeschlagen.");
+        const err = await res.json().catch(() => ({}));
+        alert("KI-Generierung fehlgeschlagen: " + (err.error || res.status));
       }
     } catch (err) {
       console.error(err);
@@ -413,6 +466,18 @@ function ControlRow({
       {/* Expanded Content */}
       {isExpanded && (
         <div className="bg-gray-50/30 px-6 py-5 border-t border-gray-100">
+          {/* Control description - always visible */}
+          {control.description && (
+            <div className="mb-4 rounded-lg bg-blue-50/60 border border-blue-100 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 mb-1">
+                Umsetzungsbeschreibung
+              </p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {control.description}
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-12 gap-6">
             {/* Left: Form fields */}
             <div className="col-span-7 space-y-4">
@@ -444,13 +509,16 @@ function ControlRow({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <Label className="text-xs text-gray-500">
-                    Begruendung
+                    Begründung
                   </Label>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs text-purple-600 hover:text-purple-700"
-                    onClick={handleGenerateAI}
+                    className="h-7 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAiPromptOpen(!aiPromptOpen);
+                    }}
                     disabled={generatingAI}
                   >
                     {generatingAI ? (
@@ -461,10 +529,56 @@ function ControlRow({
                     Mit KI generieren
                   </Button>
                 </div>
+
+                {/* AI Prompt Input */}
+                {aiPromptOpen && (
+                  <div className="mb-2 rounded-lg border border-purple-200 bg-purple-50/50 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-purple-500">
+                      KI-Anweisung (optional)
+                    </p>
+                    <Input
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="z.B. Wir nutzen Microsoft 365, Sophos, haben einen IAM-Prozess..."
+                      className="text-sm bg-white border-purple-200 focus:border-purple-400 placeholder:text-gray-400"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleGenerateAI();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateAI();
+                        }}
+                        disabled={generatingAI}
+                      >
+                        {generatingAI ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1 h-3 w-3" />
+                        )}
+                        Generieren
+                      </Button>
+                      <button
+                        onClick={() => { setAiPromptOpen(false); setAiPrompt(""); }}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <Textarea
                   value={justification}
                   onChange={(e) => setJustification(e.target.value)}
-                  placeholder="Begruendung fuer Anwendbarkeit / Nicht-Anwendbarkeit..."
+                  placeholder="Begründung für Anwendbarkeit / Nicht-Anwendbarkeit..."
                   rows={3}
                   className="text-sm"
                 />
@@ -665,6 +779,15 @@ export default function SoaPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Global AI chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatStreaming, setChatStreaming] = useState(false);
+  const [appliedUpdates, setAppliedUpdates] = useState<Set<string>>(new Set());
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
@@ -730,6 +853,97 @@ export default function SoaPage() {
     return filtered;
   }, [controls, activeTab, searchQuery]);
 
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
+
+  // Build controls summary for chat context - include full justification text
+  const controlsSummary = useMemo(
+    () =>
+      controls.map((c) => ({
+        code: c.code,
+        title: c.title,
+        justification: c.justification || "",
+      })),
+    [controls]
+  );
+
+  // Open global chat
+  const handleOpenChat = useCallback(() => {
+    setChatOpen(true);
+    setAppliedUpdates(new Set());
+    if (chatMessages.length === 0) {
+      // Seed with welcome
+      setChatMessages([
+        {
+          role: "assistant",
+          content:
+            "Hallo! Ich bin der TrustSpace SOA-Assistent. Ich kann Begründungen für alle ISO 27001 Controls erstellen oder anpassen.\n\nSag mir z.B.:\n- Welche **Tools und Software** ihr nutzt (Microsoft 365, AWS, Sophos...)\n- Welche **Prozesse** etabliert sind (IAM, Change Management...)\n- Oder frag nach einem **bestimmten Control** (z.B. \"A.8.7\")\n\nIch schaue dann welche Controls ich auf dieser Basis ausfüllen kann.",
+        },
+      ]);
+    }
+    setTimeout(() => chatInputRef.current?.focus(), 200);
+  }, [chatMessages.length]);
+
+  // Send a chat message (global)
+  const handleChatSend = useCallback(async () => {
+    if (!chatInput.trim() || chatStreaming) return;
+
+    const userMsg: ChatMessage = { role: "user", content: chatInput.trim() };
+    setChatInput("");
+    // Only send user/assistant messages (not the seeded welcome if it was never replied to)
+    const conversationMessages = [...chatMessages, userMsg].filter(
+      (_, i) => i > 0 || chatMessages.length > 1
+    );
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatStreaming(true);
+
+    const assistantMsg: ChatMessage = { role: "assistant", content: "" };
+    setChatMessages((prev) => [...prev, assistantMsg]);
+
+    try {
+      const res = await fetch("/api/llm/soa/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: conversationMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          controls: controlsSummary,
+        }),
+      });
+
+      if (!res.ok) {
+        setChatMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: "Fehler: Antwort konnte nicht geladen werden." },
+        ]);
+        return;
+      }
+
+      for await (const chunk of parseSSE(res)) {
+        setChatMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return [
+              ...prev.slice(0, -1),
+              { ...last, content: last.content + chunk },
+            ];
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.error("Chat send error:", err);
+    } finally {
+      setChatStreaming(false);
+    }
+  }, [chatInput, chatStreaming, chatMessages, controlsSummary]);
+
   // Save control
   const handleSaveControl = useCallback(
     async (id: string, data: Record<string, unknown>) => {
@@ -752,6 +966,41 @@ export default function SoaPage() {
       }
     },
     []
+  );
+
+  // Parse and extract all UPDATE blocks from an AI message
+  const parseUpdates = useCallback(
+    (content: string): { code: string; justification: string }[] => {
+      const updates: { code: string; justification: string }[] = [];
+      const regex =
+        /===UPDATE_START===\s*CONTROL:\s*(A\.\d+\.\d+)\s*JUSTIFICATION:\s*([\s\S]*?)===UPDATE_END===/g;
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        updates.push({
+          code: match[1].trim(),
+          justification: match[2].trim(),
+        });
+      }
+      return updates;
+    },
+    []
+  );
+
+  // Apply all updates from an AI message
+  const handleApplyUpdates = useCallback(
+    async (messageContent: string, messageIdx: number) => {
+      const updates = parseUpdates(messageContent);
+      if (updates.length === 0) return;
+
+      for (const upd of updates) {
+        const ctrl = controls.find((c) => c.code === upd.code);
+        if (ctrl) {
+          await handleSaveControl(ctrl.id, { justification: upd.justification });
+        }
+      }
+      setAppliedUpdates((prev) => new Set([...prev, String(messageIdx)]));
+    },
+    [controls, handleSaveControl, parseUpdates]
   );
 
   // Loading
@@ -783,13 +1032,22 @@ export default function SoaPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-          SOA - Statement of Applicability
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          ISO 27001 Kontrollen und deren Anwendbarkeit
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            SOA - Statement of Applicability
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            ISO 27001 Kontrollen und deren Anwendbarkeit
+          </p>
+        </div>
+        <Button
+          onClick={handleOpenChat}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+        >
+          <Bot className="mr-2 h-4 w-4" />
+          SOA KI-Assistent
+        </Button>
       </div>
 
       {/* Stats */}
@@ -892,6 +1150,203 @@ export default function SoaPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Chat Panel (right side, full height) ── */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-40 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+            onClick={() => setChatOpen(false)}
+          />
+
+          {/* Panel */}
+          <div className="relative z-10 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-200">
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-4 flex-shrink-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0066FF] flex-shrink-0">
+                <Bot className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900">SOA KI-Assistent</p>
+                <p className="text-xs text-gray-500">
+                  {controls.filter(c => c.justification).length}/{controls.length} Controls mit Begründung
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setChatMessages([]);
+                  setAppliedUpdates(new Set());
+                }}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Neuer Chat
+              </button>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+              {/* Welcome branding */}
+              {chatMessages.length <= 1 && (
+                <div className="flex flex-col items-center pt-10 pb-6">
+                  <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-gray-200 shadow-md mb-3">
+                    <img
+                      src="/soa-avatar.png"
+                      alt="Ihr ISMS Berater"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">Ihr ISMS Berater</p>
+                  <p className="text-xs text-gray-400 mt-0.5">TrustSpace SOA-Assistent</p>
+                </div>
+              )}
+
+              {chatMessages.map((msg, idx) => {
+                const isUser = msg.role === "user";
+                const updates = !isUser ? parseUpdates(msg.content) : [];
+                const hasUpdates = updates.length > 0;
+                const alreadyApplied = appliedUpdates.has(String(idx));
+
+                const displayContent = msg.content
+                  .replace(/===UPDATE_START===\s*CONTROL:\s*A\.\d+\.\d+\s*JUSTIFICATION:\s*[\s\S]*?===UPDATE_END===/g, "")
+                  .trim();
+
+                if (isUser) {
+                  return (
+                    <div key={idx} className="flex justify-end">
+                      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-[#0066FF] px-4 py-3 text-sm text-white leading-relaxed whitespace-pre-wrap">
+                        {displayContent}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={idx} className="space-y-2">
+                    {/* AI text */}
+                    {displayContent ? (
+                      <div className="flex gap-3">
+                        <div className="flex-shrink-0 h-7 w-7 rounded-lg bg-gray-100 flex items-center justify-center mt-0.5">
+                          <Bot className="h-4 w-4 text-gray-500" />
+                        </div>
+                        <div className="flex-1 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                          {displayContent}
+                        </div>
+                      </div>
+                    ) : !msg.content ? (
+                      <div className="flex gap-3 items-center">
+                        <div className="flex-shrink-0 h-7 w-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <Loader2 className="h-4 w-4 animate-spin text-[#0066FF]" />
+                        </div>
+                        <span className="text-sm text-gray-400">Analysiert Controls...</span>
+                      </div>
+                    ) : null}
+
+                    {/* Update cards */}
+                    {hasUpdates && (
+                      <div className="ml-10 space-y-2">
+                        {updates.map((upd, ui) => {
+                          const ctrl = controls.find(c => c.code === upd.code);
+                          return (
+                            <div
+                              key={ui}
+                              className={cn(
+                                "rounded-xl border p-3",
+                                alreadyApplied
+                                  ? "border-green-200 bg-green-50/50"
+                                  : "border-gray-200 bg-gray-50/50"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="font-mono text-xs font-bold text-[#0066FF]">
+                                  {upd.code}
+                                </span>
+                                {ctrl && (
+                                  <span className="text-xs text-gray-500 truncate">
+                                    {ctrl.title}
+                                  </span>
+                                )}
+                                {alreadyApplied && (
+                                  <CheckCircle className="h-3.5 w-3.5 text-green-500 ml-auto flex-shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">
+                                {upd.justification}
+                              </p>
+                            </div>
+                          );
+                        })}
+                        <button
+                          onClick={() => handleApplyUpdates(msg.content, idx)}
+                          disabled={alreadyApplied}
+                          className={cn(
+                            "flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-sm font-medium transition-all",
+                            alreadyApplied
+                              ? "bg-green-50 text-green-700 border border-green-200"
+                              : "bg-[#0066FF] text-white hover:bg-blue-700 shadow-sm"
+                          )}
+                        >
+                          {alreadyApplied ? (
+                            <>
+                              <CheckCircle className="h-4 w-4" />
+                              {updates.length} Control{updates.length !== 1 ? "s" : ""} gespeichert
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              {updates.length} Control{updates.length !== 1 ? "s" : ""} übernehmen
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-5 py-4">
+              <div className="flex items-end gap-3">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSend();
+                    }
+                  }}
+                  placeholder="z.B. &quot;Wir nutzen Microsoft 365, Sophos, AWS...&quot;"
+                  rows={2}
+                  disabled={chatStreaming}
+                  className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition-all focus:border-[#0066FF] focus:bg-white focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 disabled:opacity-50"
+                />
+                <button
+                  onClick={handleChatSend}
+                  disabled={chatStreaming || !chatInput.trim()}
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#0066FF] text-white transition-all hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {chatStreaming ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

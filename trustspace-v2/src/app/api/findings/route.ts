@@ -1,10 +1,11 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
   try {
     const findings = await prisma.finding.findMany({
-      where: { organizationId: "default-org" },
+      where: { organizationId: await getOrgId() },
       include: { assignee: true, vulnerability: { include: { component: { include: { sbomDocument: { include: { asset: true } } } } } } },
       orderBy: { createdAt: "desc" },
     });
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const finding = await prisma.finding.create({
       data: {
-        organizationId: "default-org",
+        organizationId: await getOrgId(),
         title,
         description: description || undefined,
         type,
@@ -76,7 +77,7 @@ export async function PUT() {
     for (const vuln of vulnsWithoutFinding) {
       await prisma.finding.create({
         data: {
-          organizationId: "default-org",
+          organizationId: await getOrgId(),
           title: vuln.cveId,
           description: vuln.remediation || undefined,
           type: "vulnerability",

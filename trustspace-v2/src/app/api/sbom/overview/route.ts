@@ -41,20 +41,11 @@ export async function GET(request: NextRequest) {
       sbom.components.forEach((component) => {
         component.vulnerabilities.forEach((vuln) => {
           vulnerabilitySummary.total++;
-          switch (vuln.severity) {
-            case "CRITICAL":
-              vulnerabilitySummary.critical++;
-              break;
-            case "HIGH":
-              vulnerabilitySummary.high++;
-              break;
-            case "MEDIUM":
-              vulnerabilitySummary.medium++;
-              break;
-            case "LOW":
-              vulnerabilitySummary.low++;
-              break;
-          }
+          const sev = (vuln.severity || "").toUpperCase();
+          if (sev === "CRITICAL") vulnerabilitySummary.critical++;
+          else if (sev === "HIGH") vulnerabilitySummary.high++;
+          else if (sev === "MEDIUM") vulnerabilitySummary.medium++;
+          else if (sev === "LOW") vulnerabilitySummary.low++;
         });
       });
 

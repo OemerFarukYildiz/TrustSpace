@@ -236,15 +236,33 @@ export default function VendorDetailPage() {
   async function handleSave() {
     setSaving(true);
     try {
+      // determine logoUrl based on website if not provided or website changed
+      const payload: any = {
+        ...form,
+        lastReviewDate: form.lastReviewDate || null,
+        nextReviewDate: form.nextReviewDate || null,
+        riskLevel: form.riskLevel || null,
+      };
+      if (form.website) {
+        try {
+          const url = new URL(
+            form.website.startsWith("http") ? form.website : `https://${form.website}`
+          );
+          const domain = url.hostname;
+          const guessed = `https://logo.clearbit.com/${domain}`;
+          // only overwrite if there is no logo or if existing logo looks like a clearbit placeholder
+          if (!vendor?.logoUrl || vendor.logoUrl.includes("clearbit.com")) {
+            payload.logoUrl = guessed;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const res = await fetch(`/api/vendors/${vendorId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          lastReviewDate: form.lastReviewDate || null,
-          nextReviewDate: form.nextReviewDate || null,
-          riskLevel: form.riskLevel || null,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();

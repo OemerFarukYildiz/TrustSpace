@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -30,7 +31,8 @@ export async function POST(request: Request) {
     const { title, content, status, controlId } = body;
 
     // Get first organization (for demo)
-    const org = await prisma.organization.findFirst();
+    const orgId = await getOrgId();
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
     if (!org) {
       return NextResponse.json({ error: "No organization found" }, { status: 400 });
     }

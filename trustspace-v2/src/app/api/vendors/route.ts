@@ -1,7 +1,7 @@
+import { getOrgId } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/vendors - Liste aller Vendors
 export async function GET(request: Request) {
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const status = searchParams.get("status");
 
-    const where: any = { organizationId: ORG_ID };
+    const where: any = { organizationId: (await getOrgId()) };
 
     if (search) {
       where.OR = [
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
     const vendor = await prisma.vendor.create({
       data: {
-        organizationId: ORG_ID,
+        organizationId: (await getOrgId()),
         name: data.name,
         category: data.category,
         services: data.services || null,

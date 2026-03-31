@@ -15,10 +15,10 @@ import {
   Clock,
   Building2,
   Filter,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -73,115 +73,81 @@ const CATEGORIES = [
 function getStatusConfig(status: string) {
   switch (status) {
     case "approved":
-      return {
-        label: "Freigegeben",
-        color: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        icon: CheckCircle2,
-      };
+      return { label: "Freigegeben", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 };
     case "evaluated":
-      return {
-        label: "Bewertet",
-        color: "bg-blue-50 text-blue-700 border-blue-200",
-        icon: FileText,
-      };
+      return { label: "Bewertet", color: "bg-blue-50 text-blue-700 border-blue-200", icon: FileText };
     case "sent":
-      return {
-        label: "Versendet",
-        color: "bg-amber-50 text-amber-700 border-amber-200",
-        icon: Clock,
-      };
+      return { label: "Versendet", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock };
     case "rejected":
-      return {
-        label: "Abgelehnt",
-        color: "bg-red-50 text-red-700 border-red-200",
-        icon: AlertTriangle,
-      };
+      return { label: "Abgelehnt", color: "bg-red-50 text-red-700 border-red-200", icon: AlertTriangle };
     default:
-      return {
-        label: "Nicht bewertet",
-        color: "bg-gray-50 text-gray-600 border-gray-200",
-        icon: Clock,
-      };
+      return { label: "Nicht bewertet", color: "bg-gray-50 text-gray-500 border-gray-200", icon: Clock };
   }
 }
 
-function getRiskBadge(level: string | null) {
+function getRiskConfig(level: string | null) {
   switch (level) {
-    case "high":
-      return { label: "Hoch", color: "bg-red-50 text-red-700 border-red-200" };
-    case "medium":
-      return {
-        label: "Mittel",
-        color: "bg-amber-50 text-amber-700 border-amber-200",
-      };
-    case "low":
-      return {
-        label: "Niedrig",
-        color: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      };
-    default:
-      return null;
+    case "high":   return { label: "Hoch", color: "bg-red-50 text-red-700 border-red-200" };
+    case "medium": return { label: "Mittel", color: "bg-amber-50 text-amber-700 border-amber-200" };
+    case "low":    return { label: "Niedrig", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    default:       return null;
   }
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—";
+function formatDate(d: string | null) {
+  if (!d) return "—";
   try {
-    return new Date(dateStr).toLocaleDateString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  } catch {
-    return "—";
-  }
+    return new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return "—"; }
 }
 
-function getLogoDomain(vendor: Vendor): string | null {
-  if (vendor.logoUrl) return null; // already has logo
-  if (vendor.website) {
-    try {
-      const url = new URL(
-        vendor.website.startsWith("http")
-          ? vendor.website
-          : `https://${vendor.website}`
-      );
-      return url.hostname;
-    } catch {
-      return null;
+function VendorAvatar({ vendor }: { vendor: Vendor }) {
+  const [imgError, setImgError] = useState(false);
+  const domain = (() => {
+    if (vendor.website) {
+      try {
+        const url = new URL(vendor.website.startsWith("http") ? vendor.website : `https://${vendor.website}`);
+        return url.hostname;
+      } catch { return null; }
     }
-  }
-  return null;
+    return null;
+  })();
+
+  const src = vendor.logoUrl || (domain && !imgError ? `https://logo.clearbit.com/${domain}` : null);
+
+  return (
+    <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200">
+      {src && !imgError ? (
+        <img src={src} alt={vendor.name} className="h-9 w-9 object-contain" onError={() => setImgError(true)} />
+      ) : (
+        <span className="text-sm font-semibold text-gray-500">
+          {vendor.name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function VendorsPage() {
   const router = useRouter();
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  // new field, part of creation form
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newVendor, setNewVendor] = useState({
-    name: "",
-    category: "IT-Dienstleistung",
-    services: "",
-  });
+  const [newVendor, setNewVendor] = useState({ name: "", category: "IT-Dienstleistung", services: "", website: "" });
 
-  useEffect(() => {
-    fetchVendors();
-  }, []);
+  useEffect(() => { fetchVendors(); }, []);
 
   async function fetchVendors() {
     try {
       const res = await fetch("/api/vendors");
-      if (res.ok) {
-        const data = await res.json();
-        setVendors(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch vendors:", error);
+      if (res.ok) setVendors(await res.json());
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -191,71 +157,67 @@ export default function VendorsPage() {
     if (!newVendor.name.trim()) return;
     setCreating(true);
     try {
+      // automatically compute a logo url based on the provided website if no logo
+      // has been specified by the user.
+      const payload: any = { ...newVendor };
+      if (newVendor.website) {
+        try {
+          const url = new URL(
+            newVendor.website.startsWith("http") ? newVendor.website : `https://${newVendor.website}`
+          );
+          const domain = url.hostname;
+          payload.logoUrl = `https://logo.clearbit.com/${domain}`;
+        } catch {
+          // ignore invalid url
+        }
+      }
+
       const res = await fetch("/api/vendors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newVendor),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const created = await res.json();
         setShowCreateDialog(false);
-        setNewVendor({ name: "", category: "IT-Dienstleistung", services: "" });
+        setNewVendor({ name: "", category: "IT-Dienstleistung", services: "", website: "" });
         router.push(`/vendors/${created.id}`);
       }
-    } catch (error) {
-      console.error("Failed to create vendor:", error);
+    } catch (e) {
+      console.error(e);
     } finally {
       setCreating(false);
     }
   }
 
-  const filtered = useMemo(() => {
-    return vendors.filter((v) => {
-      const matchesSearch =
-        !search ||
-        v.name.toLowerCase().includes(search.toLowerCase()) ||
-        v.category.toLowerCase().includes(search.toLowerCase()) ||
-        v.services?.toLowerCase().includes(search.toLowerCase()) ||
-        v.contactName?.toLowerCase().includes(search.toLowerCase());
+  const filtered = useMemo(() => vendors.filter((v) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !v.name.toLowerCase().includes(q) &&
+        !v.category.toLowerCase().includes(q) &&
+        !v.services?.toLowerCase().includes(q) &&
+        !v.contactName?.toLowerCase().includes(q)
+      ) return false;
+    }
+    if (statusFilter !== "all" && v.assessmentStatus !== statusFilter) return false;
+    if (categoryFilter !== "all" && v.category !== categoryFilter) return false;
+    return true;
+  }), [vendors, search, statusFilter, categoryFilter]);
 
-      const matchesStatus =
-        statusFilter === "all" || v.assessmentStatus === statusFilter;
+  const stats = useMemo(() => ({
+    total: vendors.length,
+    approved: vendors.filter((v) => v.assessmentStatus === "approved").length,
+    pending: vendors.filter((v) => v.assessmentStatus === "none" || v.assessmentStatus === "sent").length,
+    gdpr: vendors.filter((v) => v.gdprCompliant).length,
+  }), [vendors]);
 
-      const matchesCategory =
-        categoryFilter === "all" || v.category === categoryFilter;
-
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
-  }, [vendors, search, statusFilter, categoryFilter]);
-
-  const stats = useMemo(() => {
-    return {
-      total: vendors.length,
-      approved: vendors.filter((v) => v.assessmentStatus === "approved").length,
-      pending: vendors.filter(
-        (v) => v.assessmentStatus === "none" || v.assessmentStatus === "sent"
-      ).length,
-      gdpr: vendors.filter((v) => v.gdprCompliant).length,
-    };
-  }, [vendors]);
-
-  const uniqueCategories = useMemo(() => {
-    const cats = new Set(vendors.map((v) => v.category));
-    return Array.from(cats).sort();
-  }, [vendors]);
+  const uniqueCategories = useMemo(() => Array.from(new Set(vendors.map((v) => v.category))).sort(), [vendors]);
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 w-48 bg-gray-200 rounded" />
-          <div className="grid grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-gray-100 rounded-xl" />
-            ))}
-          </div>
-          <div className="h-96 bg-gray-100 rounded-xl" />
-        </div>
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0066FF]" />
       </div>
     );
   }
@@ -265,82 +227,35 @@ export default function VendorsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vendoren</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Drittanbieter verwalten und bewerten
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Lieferantenmanagement</h1>
+          <p className="text-sm text-gray-500 mt-1">Drittanbieter verwalten und bewerten</p>
         </div>
-        <Button
-          onClick={() => setShowCreateDialog(true)}
-          className="bg-[#0066FF] hover:bg-[#0052cc] text-white"
-        >
+        <Button onClick={() => setShowCreateDialog(true)} className="bg-[#0066FF] hover:bg-blue-700 text-white">
           <Plus className="w-4 h-4 mr-2" />
-          Vendor hinzufügen
+          Hinzufügen
         </Button>
       </div>
 
-      {/* Stats Cards */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Gesamt
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {stats.total}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Store className="h-5 w-5 text-[#0066FF]" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Freigegeben
-              </p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">
-                {stats.approved}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-              <Shield className="h-5 w-5 text-emerald-600" />
+        {[
+          { label: "Gesamt", value: stats.total, icon: Store, iconBg: "bg-blue-50", iconColor: "text-[#0066FF]", valueColor: "text-gray-900" },
+          { label: "Freigegeben", value: stats.approved, icon: Shield, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", valueColor: "text-emerald-600" },
+          { label: "Ausstehend", value: stats.pending, icon: Clock, iconBg: "bg-amber-50", iconColor: "text-amber-600", valueColor: "text-amber-600" },
+          { label: "DSGVO-konform", value: stats.gdpr, icon: Globe, iconBg: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-purple-600" },
+        ].map((s) => (
+          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{s.label}</p>
+                <p className={cn("text-2xl font-bold mt-1", s.valueColor)}>{s.value}</p>
+              </div>
+              <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center", s.iconBg)}>
+                <s.icon className={cn("h-5 w-5", s.iconColor)} />
+              </div>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Ausstehend
-              </p>
-              <p className="text-2xl font-bold text-amber-600 mt-1">
-                {stats.pending}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-amber-50 flex items-center justify-center">
-              <Clock className="h-5 w-5 text-amber-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                DSGVO-konform
-              </p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">
-                {stats.gdpr}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center">
-              <Globe className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Filter Bar */}
@@ -349,7 +264,7 @@ export default function VendorsPage() {
           <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Vendor suchen..."
+              placeholder="Lieferant suchen..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 bg-gray-50 border-gray-200 focus:bg-white"
@@ -381,9 +296,7 @@ export default function VendorsPage() {
             <SelectContent>
               <SelectItem value="all">Alle Kategorien</SelectItem>
               {uniqueCategories.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat}
-                </SelectItem>
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -392,53 +305,41 @@ export default function VendorsPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Lieferant
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Kategorie
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Risiko
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  DSGVO
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Review
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Dokumente
-                </th>
-                <th className="py-3 px-4 w-10" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="text-center py-16 text-gray-400 text-sm"
-                  >
-                    <Store className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                    {vendors.length === 0
-                      ? "Noch keine Vendoren angelegt"
-                      : "Keine Vendoren gefunden"}
-                  </td>
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <Store className="h-12 w-12 mb-4 text-gray-200" />
+            <p className="text-sm font-medium">
+              {vendors.length === 0 ? "Noch keine Lieferanten angelegt" : "Keine Lieferanten gefunden"}
+            </p>
+            {vendors.length === 0 && (
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="mt-3 text-xs text-[#0066FF] hover:underline"
+              >
+                Ersten Lieferanten hinzufügen
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lieferant</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Kategorie</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Fragebogen Status</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Risiko</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">DSGVO</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Verantwortlich</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Review Datum</th>
+                  <th className="py-3 px-4 w-10" />
                 </tr>
-              ) : (
-                filtered.map((vendor) => {
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((vendor) => {
                   const statusCfg = getStatusConfig(vendor.assessmentStatus);
                   const StatusIcon = statusCfg.icon;
-                  const riskBadge = getRiskBadge(vendor.riskLevel);
-                  const logoDomain = getLogoDomain(vendor);
+                  const riskCfg = getRiskConfig(vendor.riskLevel);
 
                   return (
                     <tr
@@ -449,46 +350,11 @@ export default function VendorsPage() {
                       {/* Lieferant */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {vendor.logoUrl ? (
-                              <img
-                                src={vendor.logoUrl}
-                                alt={vendor.name}
-                                className="h-9 w-9 object-contain"
-                              />
-                            ) : logoDomain ? (
-                              <img
-                                src={`https://logo.clearbit.com/${logoDomain}`}
-                                alt={vendor.name}
-                                className="h-9 w-9 object-contain"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display =
-                                    "none";
-                                  (
-                                    e.target as HTMLImageElement
-                                  ).nextElementSibling?.classList.remove(
-                                    "hidden"
-                                  );
-                                }}
-                              />
-                            ) : null}
-                            <span
-                              className={cn(
-                                "text-sm font-semibold text-gray-400",
-                                (vendor.logoUrl || logoDomain) && "hidden"
-                              )}
-                            >
-                              {vendor.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
+                          <VendorAvatar vendor={vendor} />
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {vendor.name}
-                            </p>
+                            <p className="text-sm font-medium text-gray-900 truncate">{vendor.name}</p>
                             {vendor.services && (
-                              <p className="text-xs text-gray-500 truncate max-w-[200px]">
-                                {vendor.services}
-                              </p>
+                              <p className="text-xs text-gray-400 truncate max-w-[200px]">{vendor.services}</p>
                             )}
                           </div>
                         </div>
@@ -496,19 +362,14 @@ export default function VendorsPage() {
 
                       {/* Kategorie */}
                       <td className="py-3.5 px-4">
-                        <span className="text-sm text-gray-600">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
                           {vendor.category}
                         </span>
                       </td>
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        <div
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
-                            statusCfg.color
-                          )}
-                        >
+                        <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border", statusCfg.color)}>
                           <StatusIcon className="h-3 w-3" />
                           {statusCfg.label}
                         </div>
@@ -516,17 +377,12 @@ export default function VendorsPage() {
 
                       {/* Risiko */}
                       <td className="py-3.5 px-4">
-                        {riskBadge ? (
-                          <span
-                            className={cn(
-                              "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border",
-                              riskBadge.color
-                            )}
-                          >
-                            {riskBadge.label}
+                        {riskCfg ? (
+                          <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border", riskCfg.color)}>
+                            {riskCfg.label}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          <span className="text-xs text-gray-300">—</span>
                         )}
                       </td>
 
@@ -535,24 +391,20 @@ export default function VendorsPage() {
                         {vendor.gdprCompliant === true ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                         ) : vendor.gdprCompliant === false ? (
-                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                          <AlertTriangle className="h-4 w-4 text-red-400" />
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          <span className="text-xs text-gray-300">—</span>
                         )}
                       </td>
 
-                      {/* Review */}
+                      {/* Verantwortlich */}
                       <td className="py-3.5 px-4">
-                        <span className="text-xs text-gray-500">
-                          {formatDate(vendor.nextReviewDate)}
-                        </span>
+                        <span className="text-sm text-gray-600">{vendor.contactName || <span className="text-gray-300">—</span>}</span>
                       </td>
 
-                      {/* Dokumente */}
+                      {/* Review Datum */}
                       <td className="py-3.5 px-4">
-                        <span className="text-xs text-gray-500">
-                          {vendor._count?.vendorDocuments ?? 0}
-                        </span>
+                        <span className="text-xs text-gray-500">{formatDate(vendor.nextReviewDate)}</span>
                       </td>
 
                       {/* Arrow */}
@@ -561,18 +413,21 @@ export default function VendorsPage() {
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+            <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
+              {filtered.length} von {vendors.length} Lieferanten
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Neuen Vendor hinzufügen</DialogTitle>
+            <DialogTitle>Neuen Lieferanten hinzufügen</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -581,31 +436,36 @@ export default function VendorsPage() {
                 id="vendor-name"
                 placeholder="z.B. Microsoft Azure"
                 value={newVendor.name}
-                onChange={(e) =>
-                  setNewVendor((p) => ({ ...p, name: e.target.value }))
-                }
+                onChange={(e) => setNewVendor((p) => ({ ...p, name: e.target.value }))}
                 className="mt-1.5"
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               />
             </div>
             <div>
               <Label htmlFor="vendor-category">Kategorie</Label>
-              <Select
-                value={newVendor.category}
-                onValueChange={(v) =>
-                  setNewVendor((p) => ({ ...p, category: v }))
-                }
-              >
+              <Select value={newVendor.category} onValueChange={(v) => setNewVendor((p) => ({ ...p, category: v }))}>
                 <SelectTrigger className="mt-1.5">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="vendor-website">Website</Label>
+              <div className="relative mt-1.5">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="vendor-website"
+                  placeholder="https://example.com"
+                  value={newVendor.website}
+                  onChange={(e) => setNewVendor((p) => ({ ...p, website: e.target.value }))}
+                  className="pl-9"
+                />
+              </div>
             </div>
             <div>
               <Label htmlFor="vendor-services">Dienste / Beschreibung</Label>
@@ -613,26 +473,19 @@ export default function VendorsPage() {
                 id="vendor-services"
                 placeholder="z.B. Cloud-Infrastruktur, SaaS-Plattform"
                 value={newVendor.services}
-                onChange={(e) =>
-                  setNewVendor((p) => ({ ...p, services: e.target.value }))
-                }
+                onChange={(e) => setNewVendor((p) => ({ ...p, services: e.target.value }))}
                 className="mt-1.5"
               />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateDialog(false)}
-            >
-              Abbrechen
-            </Button>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Abbrechen</Button>
             <Button
               onClick={handleCreate}
               disabled={!newVendor.name.trim() || creating}
-              className="bg-[#0066FF] hover:bg-[#0052cc] text-white"
+              className="bg-[#0066FF] hover:bg-blue-700 text-white"
             >
-              {creating ? "Erstelle..." : "Vendor anlegen"}
+              {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Erstelle...</> : "Lieferant anlegen"}
             </Button>
           </div>
         </DialogContent>

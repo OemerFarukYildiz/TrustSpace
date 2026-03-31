@@ -1,3 +1,4 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       data: {
         assetId: data.assetId,
         threatId: data.threatId,
-        organizationId: data.organizationId || "default",
+        organizationId: await getOrgId(),
         // Legacy fields (kept for compatibility)
         bruttoProbability: data.bruttoProbability || 1,
         bruttoImpact: data.bruttoImpact || 1,

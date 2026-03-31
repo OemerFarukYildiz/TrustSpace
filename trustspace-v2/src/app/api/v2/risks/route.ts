@@ -1,7 +1,7 @@
+import { getOrgId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const ORG_ID = "default-org";
 
 // GET /api/v2/risks - Alle V2 Risiken auflisten
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const riskCategory = searchParams.get("riskCategory");
 
     const where: Record<string, unknown> = {
-      organizationId: ORG_ID,
+      organizationId: (await getOrgId()),
     };
 
     if (assetId) {
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     const risk = await prisma.riskV2.create({
       data: {
-        organizationId: ORG_ID,
+        organizationId: (await getOrgId()),
         assetId: data.assetId || null,
         title: data.title,
         description: data.description || null,
