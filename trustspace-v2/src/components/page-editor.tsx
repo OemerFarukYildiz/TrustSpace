@@ -137,22 +137,7 @@ const CalloutNode = Node.create({
     return ["div", mergeAttributes(HTMLAttributes, { class: "callout-block" }), 0];
   },
 
-  addKeyboardShortcuts() {
-    return {
-      // Allow Backspace to exit callout when at start of first block
-      Backspace: () => {
-        const { state, dispatch } = this.editor.view;
-        const { selection } = state;
-        if (selection.$from.parent.type.name !== "callout" &&
-            selection.$from.depth >= 2 &&
-            selection.$from.parentOffset === 0 &&
-            selection.$from.index(selection.$from.depth - 1) === 0) {
-          // let default handle it
-        }
-        return false;
-      },
-    };
-  },
+  // No custom keyboard shortcuts - let Tiptap handle everything natively
 });
 
 // ─── Slash Command Data ───────────────────────────────────────────────────────
@@ -586,8 +571,7 @@ export default function PageEditor({
     if (!editor) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Only intercept when a menu is open - otherwise let ALL keys through to Tiptap
-      if (!slashOpen && !mentionOpen) return;
+      // This handler is ONLY attached when slashOpen or mentionOpen is true
 
       // ── Slash menu handling ─────────────────────────────────────────────
       if (slashOpen) {
@@ -719,7 +703,9 @@ export default function PageEditor({
       }
     };
 
-    // Use non-capture phase so Tiptap's own handlers run first for normal editing
+    // ONLY attach listener when a menu is actually open
+    if (!slashOpen && !mentionOpen) return;
+
     const editorDom = editor.view.dom;
     editorDom.addEventListener("keydown", handleKeyDown);
     return () => editorDom.removeEventListener("keydown", handleKeyDown);
