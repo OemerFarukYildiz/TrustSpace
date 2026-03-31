@@ -43,7 +43,6 @@ const TYPE_LABEL: Record<string, string> = {
   incident: "Vorfall",
   improvement: "Verbesserung",
   task: "Aufgabe",
-  vulnerability: "Schwachstelle",
 };
 
 const PRIORITY_CFG: Record<string, { label: string; cls: string }> = {
@@ -61,15 +60,6 @@ const STATUS_CFG: Record<string, { label: string; icon: React.ReactNode; cls: st
 };
 
 const CATEGORIES = [
-  {
-    type: "vulnerability",
-    label: "Schwachstellen",
-    description: "CVE & Security Issues",
-    icon: ShieldAlert,
-    gradient: "from-red-500 via-red-600 to-orange-500",
-    accent: "border-red-200",
-    countColor: "text-red-600",
-  },
   {
     type: "audit_finding",
     label: "Audit Findings",
@@ -107,6 +97,7 @@ const CATEGORIES = [
     countColor: "text-gray-600",
   },
 ];
+
 
 function formatDate(d: string | null) {
   if (!d) return "-";
@@ -158,7 +149,11 @@ export default function FindingsPage() {
               Alle anzeigen
             </Button>
           )}
-          <Button className="bg-[#0066FF] hover:bg-blue-700">
+
+          <Button
+            className="bg-[#0066FF] hover:bg-blue-700"
+            onClick={() => router.push("/findings/improvement")}
+          >
             <Plus className="w-4 h-4 mr-2" />
             Maßnahme erstellen
           </Button>
@@ -355,7 +350,7 @@ export default function FindingsPage() {
                           <tr
                             key={f.id}
                             className="hover:bg-blue-50/40 transition-colors group cursor-pointer border-b border-gray-50"
-                            onClick={() => router.push(`/findings/ticket/${f.id}`)}
+                            onClick={() => router.push(`/findings/${f.id}`)}
                           >
                             <td className="py-3.5 px-6">
                               <div>

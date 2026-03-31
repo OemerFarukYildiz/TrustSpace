@@ -8,6 +8,7 @@ import {
   ShieldAlert, ClipboardList, TrendingUp, Bug,
   Folder, FolderOpen, ChevronRight, ExternalLink, Search,
   Pencil, Trash2, FolderPlus, MoreVertical, MoveRight, X, Check,
+  Ticket,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -20,6 +21,11 @@ type Finding = {
   dueDate: string | null;
   folder: string | null;
   createdAt: string;
+  intruderIssueId?: string | null;
+  intruderSnoozed?: boolean;
+  intruderSnoozeReason?: string | null;
+  intruderSeverity?: string | null;
+  remediation?: string | null;
   assignee?: { firstName: string; lastName: string } | null;
   vulnerability?: {
     cveId: string;
@@ -34,11 +40,11 @@ type Finding = {
 type FolderRecord = { id: string; name: string; type: string };
 
 const TYPE_META: Record<string, { label: string; icon: React.ElementType; gradient: string; accent: string }> = {
-  vulnerability: { label: "Schwachstellen",  icon: ShieldAlert,   gradient: "from-red-500 to-orange-500",     accent: "border-red-200 text-red-700" },
   audit_finding: { label: "Audit Findings",  icon: ClipboardList, gradient: "from-blue-500 to-indigo-500",    accent: "border-blue-200 text-blue-700" },
   improvement:   { label: "Verbesserungen",  icon: TrendingUp,    gradient: "from-green-500 to-emerald-500",  accent: "border-green-200 text-green-700" },
   incident:      { label: "Vorfälle",        icon: Bug,           gradient: "from-purple-500 to-pink-500",    accent: "border-purple-200 text-purple-700" },
   task:          { label: "Aufgaben",        icon: ClipboardList, gradient: "from-gray-500 to-slate-600",     accent: "border-gray-200 text-gray-700" },
+  ticket:        { label: "Tickets",         icon: Ticket,        gradient: "from-indigo-500 to-blue-500",      accent: "border-indigo-200 text-indigo-700" },
 };
 
 const PRIORITY_CFG: Record<string, { label: string; cls: string }> = {
@@ -193,6 +199,149 @@ function CreateFindingModal({ type, folders, onClose, onCreated }: {
   );
 }
 
+// ── Treat Intruder Finding Modal ─────────────────────────────────────────────
+function TreatFindingModal({ finding, onClose, onTreated }: {
+  finding: Finding;
+  onClose: () => void;
+  onTreated: (updated: Finding) => void;
+}) {
+  const [reason, setReason] = useState("ACCEPT_RISK");
+  const [durationType, setDuration] = useState("forever");
+  const [details, setDetails] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+
+    const res = await fetch("/api/intruder/treat-finding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        findingId: finding.id,
+        reason,
+        durationType,
+        details: details.trim() || undefined,
+      }),
+    });
+
+    const data = await res.json();
+    setSaving(false);
+
+    if (!res.ok) {
+      setError(data.error || "Fehler bei der Behandlung");
+      return;
+    }
+
+    onTreated({
+      ...finding,
+      status: reason === "MITIGATING_CONTROLS" ? "in_progress" : "closed",
+      intruderSnoozed: true,
+      intruderSnoozeReason: reason,
+    });
+  }
+
+  const reasons = [
+    { value: "ACCEPT_RISK", label: "Risiko akzeptieren", desc: "Das Risiko wird bewusst akzeptiert und dokumentiert." },
+    { value: "FALSE_POSITIVE", label: "Fehlalarm", desc: "Die Schwachstelle ist nicht ausnutzbar / trifft nicht zu." },
+    { value: "MITIGATING_CONTROLS", label: "Kompensierende Maßnahmen", desc: "Es gibt bereits Schutzmaßnahmen, die das Risiko mindern." },
+  ];
+
+  const durations = [
+    { value: "forever", label: "Dauerhaft" },
+    { value: "month", label: "1 Monat" },
+    { value: "week", label: "1 Woche" },
+    { value: "day", label: "1 Tag" },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="font-semibold text-gray-800">Schwachstelle behandeln</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{finding.title}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="p-6 space-y-5">
+          {/* Reason */}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Behandlung</label>
+            <div className="space-y-2">
+              {reasons.map(r => (
+                <label
+                  key={r.value}
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    reason === r.value
+                      ? "border-blue-400 bg-blue-50/50 ring-1 ring-blue-200"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <input
+                    type="radio" name="reason" value={r.value}
+                    checked={reason === r.value}
+                    onChange={() => setReason(r.value)}
+                    className="mt-0.5 accent-blue-500"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">{r.label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Dauer</label>
+            <select
+              value={durationType} onChange={e => setDuration(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            >
+              {durations.map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Details */}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Begründung (optional)</label>
+            <textarea
+              value={details} onChange={e => setDetails(e.target.value)} rows={2}
+              placeholder="Warum wird diese Schwachstelle so behandelt?"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-gray-400">Wird auch bei Intruder gesnoozed</p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>Abbrechen</Button>
+              <Button type="submit" size="sm" disabled={saving} className="bg-[#0066FF] hover:bg-blue-700 text-white">
+                {saving ? "Behandle..." : "Behandeln & Snoozen"}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function FindingsCategoryPage({ type }: { type: string }) {
   const router = useRouter();
@@ -212,6 +361,7 @@ export default function FindingsCategoryPage({ type }: { type: string }) {
   const [newFolderName, setNewFolderName] = useState("");
   const [movingFindingId, setMoving]   = useState<string | null>(null);
   const [showCreateModal, setShowModal] = useState(false);
+  const [treatingFinding, setTreating] = useState<Finding | null>(null);
   const moveMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -589,6 +739,21 @@ export default function FindingsCategoryPage({ type }: { type: string }) {
                                           <p className="text-xs text-gray-300 px-3 py-2 italic">Noch keine Ordner angelegt</p>
                                         )}
                                         <div className="border-t border-gray-50 mt-1 pt-1">
+                                          {f.intruderIssueId && !f.intruderSnoozed && (
+                                            <button
+                                              onClick={() => { setTreating(f); setMoving(null); }}
+                                              className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2 text-blue-600"
+                                            >
+                                              <ShieldAlert className="w-3.5 h-3.5" />
+                                              Behandeln
+                                            </button>
+                                          )}
+                                          {f.intruderSnoozed && (
+                                            <div className="px-3 py-2 text-xs text-gray-400 flex items-center gap-2">
+                                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                                              Bereits behandelt
+                                            </div>
+                                          )}
                                           <button
                                             onClick={async () => {
                                               if (confirm("Maßnahme löschen?")) {
@@ -630,6 +795,18 @@ export default function FindingsCategoryPage({ type }: { type: string }) {
           onCreated={(f) => {
             setFindings(prev => [f as Finding, ...prev]);
             setShowModal(false);
+          }}
+        />
+      )}
+
+      {/* Treat Intruder Finding Modal */}
+      {treatingFinding && (
+        <TreatFindingModal
+          finding={treatingFinding}
+          onClose={() => setTreating(null)}
+          onTreated={(updated) => {
+            setFindings(prev => prev.map(f => f.id === updated.id ? updated : f));
+            setTreating(null);
           }}
         />
       )}

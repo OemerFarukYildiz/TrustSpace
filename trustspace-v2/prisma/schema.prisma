@@ -31,6 +31,7 @@ model Organization {
   sbomDocuments SbomDocument[]
   assetsV2        AssetV2[]
   risksV2         RiskV2[]
+  simulations     SimulationSession[]
 
   @@map("organizations")
 }
@@ -387,6 +388,7 @@ model Employee {
   controls        Control[]
   auditOwners     AuditOwner[]
   findings        Finding[]
+  simulationParticipants SimulationParticipant[]
 
   @@unique([organizationId, email])
   @@map("employees")
@@ -409,6 +411,14 @@ model Finding {
   auditId             String?
   vulnerabilityId     String?  // Link to VexVulnerability (CVE-Maßnahme)
   folder              String?  // Ordner/Version-Gruppe
+
+  // Intruder-Verknüpfung
+  intruderIssueId     String?  // Intruder Issue ID für Sync
+  intruderSnoozed     Boolean  @default(false) // ob bei Intruder gesnoozed
+  intruderSnoozeReason String? // ACCEPT_RISK, FALSE_POSITIVE, MITIGATING_CONTROLS
+  intruderTargetAddress String? // Target-Adresse für Zuordnung
+  intruderSeverity    String?  // original Intruder severity
+  remediation         String?  // Intruder remediation text
 
   // Typ-spezifische Felder
   controlRef          String?  // für audit_finding: ISO-Kontrolle
@@ -486,6 +496,7 @@ model Audit {
   owners          AuditOwner[]
   findings        Finding[]
   auditCalendar   AuditCalendar[]
+  simulations     SimulationSession[]
 
   @@map("audits")
 }
@@ -662,4 +673,62 @@ model RiskV2 {
   asset             AssetV2?     @relation(fields: [assetId], references: [id])
 
   @@map("risks_v2")
+}
+
+// ============ SIMULATION MODELS ============
+
+model SimulationScenario {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  title            String
+  description      String?
+  category         String
+  difficulty       String   @default("medium")
+  decisionTree     String   // JSON
+  estimatedMinutes Int      @default(15)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  sessions         SimulationSession[]
+
+  @@map("simulation_scenarios")
+}
+
+model SimulationSession {
+  id             String   @id @default(cuid())
+  organizationId String
+  scenarioId     String
+  auditId        String?
+  title          String
+  description    String?
+  status         String   @default("draft")
+  deadline       DateTime?
+  customFields   String?  // JSON
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  scenario       SimulationScenario @relation(fields: [scenarioId], references: [id])
+  audit          Audit? @relation(fields: [auditId], references: [id])
+  participants   SimulationParticipant[]
+
+  @@map("simulation_sessions")
+}
+
+model SimulationParticipant {
+  id           String    @id @default(cuid())
+  sessionId    String
+  employeeId   String
+  token        String    @unique @default(cuid())
+  status       String    @default("pending")
+  startedAt    DateTime?
+  completedAt  DateTime?
+  currentScene Int       @default(0)
+  choices      String?   // JSON
+  score        Int       @default(0)
+  maxScore     Int       @default(0)
+  timeTakenSec Int       @default(0)
+  session      SimulationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, employeeId])
+  @@map("simulation_participants")
 }

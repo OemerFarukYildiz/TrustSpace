@@ -18,6 +18,11 @@ type Finding = {
   priority: string; status: string; dueDate: string | null; folder: string | null;
   controlRef: string | null; deviation: string | null; rootCause: string | null;
   createdAt: string; updatedAt: string;
+  intruderIssueId?: string | null;
+  intruderSnoozed?: boolean;
+  intruderSnoozeReason?: string | null;
+  intruderSeverity?: string | null;
+  remediation?: string | null;
   assignee?: { id: string; firstName: string; lastName: string } | null;
   vulnerability?: {
     id: string; cveId: string; cvssScore: number | null; severity: string;
@@ -97,6 +102,13 @@ export default function FindingDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  // Intruder treatment
+  const [showTreat, setShowTreat] = useState(false);
+  const [treatReason, setTreatReason] = useState("ACCEPT_RISK");
+  const [treatDuration, setTreatDuration] = useState("forever");
+  const [treatDetails, setTreatDetails] = useState("");
+  const [treating, setTreating] = useState(false);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/findings/${id}`).then(r => r.json()),
@@ -160,6 +172,30 @@ export default function FindingDetailPage() {
     setAttachments(prev => [a, ...prev]);
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function treatFinding() {
+    setTreating(true);
+    const res = await fetch("/api/intruder/treat-finding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        findingId: id,
+        reason: treatReason,
+        durationType: treatDuration,
+        details: treatDetails.trim() || undefined,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setFinding(data.finding);
+      setStatus(data.finding.status);
+      setShowTreat(false);
+      // Reload comments to show system comment
+      const c = await fetch(`/api/findings/${id}/comments`).then(r => r.json());
+      setComments(Array.isArray(c) ? c : []);
+    }
+    setTreating(false);
   }
 
   async function deleteFinding() {
@@ -256,6 +292,14 @@ export default function FindingDetailPage() {
                 className="w-full text-sm text-gray-700 border border-gray-200 rounded-xl p-3.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
               />
             </div>
+
+            {/* Remediation (from Intruder) */}
+            {finding.remediation && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Remediation</label>
+                <p className="text-sm text-gray-600 leading-relaxed">{finding.remediation}</p>
+              </div>
+            )}
           </div>
 
           {/* Audit Finding fields */}
@@ -522,6 +566,95 @@ export default function FindingDetailPage() {
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
               </div>
+            </div>
+          )}
+
+          {/* Intruder Treatment */}
+          {finding.intruderIssueId && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Intruder Issue</h3>
+              <div className="text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Issue ID</span>
+                  <span className="font-mono text-gray-600">#{finding.intruderIssueId}</span>
+                </div>
+                {finding.intruderSeverity && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Severity</span>
+                    <span className={`px-2 py-0.5 rounded-full font-medium border ${
+                      finding.intruderSeverity === "critical" ? "bg-red-100 text-red-700 border-red-200" :
+                      finding.intruderSeverity === "high" ? "bg-orange-100 text-orange-700 border-orange-200" :
+                      finding.intruderSeverity === "medium" ? "bg-yellow-100 text-yellow-700 border-yellow-200" :
+                      "bg-blue-100 text-blue-700 border-blue-200"
+                    }`}>{finding.intruderSeverity}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Status</span>
+                  {finding.intruderSnoozed ? (
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {finding.intruderSnoozeReason === "ACCEPT_RISK" ? "Risiko akzeptiert" :
+                       finding.intruderSnoozeReason === "FALSE_POSITIVE" ? "Fehlalarm" :
+                       finding.intruderSnoozeReason === "MITIGATING_CONTROLS" ? "Kompensiert" : "Gesnoozed"}
+                    </span>
+                  ) : (
+                    <span className="text-red-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Offen
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {!finding.intruderSnoozed && (
+                <div className="mt-4">
+                  {!showTreat ? (
+                    <Button
+                      size="sm"
+                      onClick={() => setShowTreat(true)}
+                      className="w-full bg-[#0066FF] hover:bg-blue-700 text-white text-xs"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5 mr-1.5" />
+                      Behandeln
+                    </Button>
+                  ) : (
+                    <div className="space-y-3 pt-2 border-t border-gray-100">
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Behandlung</label>
+                        <select value={treatReason} onChange={e => setTreatReason(e.target.value)}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none">
+                          <option value="ACCEPT_RISK">Risiko akzeptieren</option>
+                          <option value="FALSE_POSITIVE">Fehlalarm</option>
+                          <option value="MITIGATING_CONTROLS">Kompensierende Maßnahmen</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Dauer</label>
+                        <select value={treatDuration} onChange={e => setTreatDuration(e.target.value)}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none">
+                          <option value="forever">Dauerhaft</option>
+                          <option value="month">1 Monat</option>
+                          <option value="week">1 Woche</option>
+                          <option value="day">1 Tag</option>
+                        </select>
+                      </div>
+                      <textarea
+                        value={treatDetails} onChange={e => setTreatDetails(e.target.value)}
+                        rows={2} placeholder="Begründung (optional)..."
+                        className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 resize-none focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowTreat(false)} className="flex-1 text-xs">
+                          Abbrechen
+                        </Button>
+                        <Button size="sm" onClick={treatFinding} disabled={treating} className="flex-1 bg-[#0066FF] hover:bg-blue-700 text-white text-xs">
+                          {treating ? "..." : "Snoozen"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
